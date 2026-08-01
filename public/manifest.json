@@ -1,0 +1,14 @@
+{
+  "name": "FitCheck — Your Wardrobe, Styled",
+  "short_name": "FitCheck",
+  "description": "Build your digital wardrobe. Get styled outfits. Shop what's missing.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#18181b",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
