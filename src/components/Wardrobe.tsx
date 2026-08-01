@@ -179,16 +179,17 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
       {selected && !selectMode && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl max-h-[55vh] overflow-y-auto animate-slide-up">
+          <div className="bg-white w-full max-w-lg rounded-t-3xl animate-slide-up" style={{ maxHeight: editing ? "70vh" : "55vh" }}>
             {/* Handle + close */}
             <div className="sticky top-0 bg-white z-10 rounded-t-3xl">
               <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-2.5" />
               <div className="flex items-center justify-between px-4 py-1.5">
-                <button onClick={closeSheet} className="text-[14px] text-zinc-400 font-medium">Close</button>
+                <button onClick={editing ? () => setEditing(false) : closeSheet} className="text-[14px] text-zinc-400 font-medium">{editing ? "← Back" : "Close"}</button>
                 <span className="text-[13px] font-semibold text-zinc-900">{editing ? "Edit" : "Details"}</span>
                 <div className="w-10" />
               </div>
             </div>
+            <div className="overflow-y-auto" style={{ maxHeight: editing ? "calc(70vh - 50px)" : "calc(55vh - 50px)" }}>
 
             {!editing ? (
               <>
@@ -285,6 +286,7 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
                 </div>
               </div>
             )}
+            </div>{/* end scroll wrapper */}
           </div>
         </div>
       )}

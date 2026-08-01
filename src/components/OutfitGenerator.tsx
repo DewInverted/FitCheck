@@ -130,7 +130,14 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
             <OutfitCard key={activeOutfit} outfit={current} index={activeOutfit}
               saved={savedOutfits.has(activeOutfit)} onSave={() => save(current, activeOutfit)}
               onPrev={activeOutfit > 0 ? () => setActiveOutfit((p) => p - 1) : undefined}
-              onNext={activeOutfit < outfits.length - 1 ? () => setActiveOutfit((p) => p + 1) : undefined} />
+              onNext={activeOutfit < outfits.length - 1 ? () => setActiveOutfit((p) => p + 1) : undefined}
+              onSwap={(cat, newItem) => {
+                setOutfits(prev => prev.map((o, i) => {
+                  if (i !== activeOutfit) return o;
+                  const newItems = o.items.map(item => item.category === cat ? newItem : item);
+                  return { ...o, items: newItems, description: newItems.map(it => it.name).join(" + ") };
+                }));
+              }} />
           )}
         </div>
       )}
@@ -159,16 +166,34 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
 
 /* ════════ Outfit Card ════════ */
 
-function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext }: {
+function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
   outfit: OutfitResult; index: number; saved: boolean; onSave: () => void;
   onPrev?: () => void; onNext?: () => void;
+  onSwap?: (category: string, newItem: ClothingItem) => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
+  const [swapCategory, setSwapCategory] = useState<string | null>(null);
+  const [swapOptions, setSwapOptions] = useState<ClothingItem[]>([]);
+  const [loadingSwap, setLoadingSwap] = useState(false);
+
   const top = outfit.items.find((i) => i.category === "top");
   const bottom = outfit.items.find((i) => i.category === "bottom");
   const shoes = outfit.items.find((i) => i.category === "shoes");
   const outer = outfit.items.find((i) => i.category === "outerwear");
   const scoreLabel = outfit.score >= 90 ? "Perfect" : outfit.score >= 80 ? "Great" : outfit.score >= 65 ? "Good" : "OK";
+
+  const openSwap = async (cat: string) => {
+    setLoadingSwap(true);
+    setSwapCategory(cat);
+    try {
+      const r = await fetch("/api/clothes");
+      if (r.ok) {
+        const all: ClothingItem[] = await r.json();
+        const currentIds = new Set(outfit.items.map(i => i.id));
+        setSwapOptions(all.filter(i => i.category === cat && !currentIds.has(i.id)));
+      }
+    } catch {} finally { setLoadingSwap(false); }
+  };
 
   return (
     <div className="animate-scale-in">
@@ -207,26 +232,35 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext }: {
             )}
 
             <div className="flex flex-col items-center">
-              {/* Top — drops in first */}
-              <div className="w-[160px] aspect-[4/5] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white relative z-[1] animate-stack-drop"
+              {/* Top — tap to swap */}
+              <button onClick={() => openSwap("top")} className="w-[160px] aspect-[4/5] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white relative z-[1] animate-stack-drop group"
                 style={{ animationDelay: "0.05s" }}>
                 {top ? <img src={top.imageData} alt={top.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-zinc-200 flex items-center justify-center text-zinc-400 text-[11px]">Top</div>}
-              </div>
+                <div className="absolute inset-0 bg-black/0 group-active:bg-black/10 transition-colors flex items-end justify-center pb-2">
+                  <span className="text-[8px] text-white/0 group-active:text-white/80 bg-black/40 px-2 py-0.5 rounded-full font-medium">tap to swap</span>
+                </div>
+              </button>
 
-              {/* Bottom — drops in second, overlaps top */}
-              <div className="w-[144px] aspect-[3/4] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white -mt-3 relative z-[2] animate-stack-drop"
+              {/* Bottom — tap to swap */}
+              <button onClick={() => openSwap("bottom")} className="w-[144px] aspect-[3/4] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white -mt-3 relative z-[2] animate-stack-drop group"
                 style={{ animationDelay: "0.15s" }}>
                 {bottom ? <img src={bottom.imageData} alt={bottom.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-zinc-200 flex items-center justify-center text-zinc-400 text-[11px]">Bottom</div>}
-              </div>
+                <div className="absolute inset-0 bg-black/0 group-active:bg-black/10 transition-colors flex items-end justify-center pb-2">
+                  <span className="text-[8px] text-white/0 group-active:text-white/80 bg-black/40 px-2 py-0.5 rounded-full font-medium">tap to swap</span>
+                </div>
+              </button>
 
-              {/* Shoes — drops in last, overlaps bottom */}
-              <div className="w-[108px] aspect-[5/4] rounded-xl overflow-hidden border-[3px] border-white shadow-md bg-white -mt-3 relative z-[3] animate-stack-drop"
+              {/* Shoes — tap to swap */}
+              <button onClick={() => openSwap("shoes")} className="w-[108px] aspect-[5/4] rounded-xl overflow-hidden border-[3px] border-white shadow-md bg-white -mt-3 relative z-[3] animate-stack-drop group"
                 style={{ animationDelay: "0.25s" }}>
                 {shoes ? <img src={shoes.imageData} alt={shoes.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-zinc-200 flex items-center justify-center text-zinc-400 text-[11px]">Shoes</div>}
-              </div>
+                <div className="absolute inset-0 bg-black/0 group-active:bg-black/10 transition-colors flex items-end justify-center pb-1">
+                  <span className="text-[8px] text-white/0 group-active:text-white/80 bg-black/40 px-2 py-0.5 rounded-full font-medium">tap to swap</span>
+                </div>
+              </button>
             </div>
           </div>
         </div>
@@ -296,6 +330,42 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext }: {
                   {l.label}
                 </a>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Swap picker */}
+      {swapCategory && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
+          onClick={(e) => { if (e.target === e.currentTarget) setSwapCategory(null); }}>
+          <div className="bg-white w-full max-w-lg rounded-t-3xl max-h-[50vh] overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-white z-10 rounded-t-3xl">
+              <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-2.5" />
+              <div className="flex items-center justify-between px-4 py-2">
+                <button onClick={() => setSwapCategory(null)} className="text-[14px] text-zinc-400 font-medium">Cancel</button>
+                <span className="text-[13px] font-semibold text-zinc-900">Swap {swapCategory}</span>
+                <div className="w-12" />
+              </div>
+            </div>
+            <div className="px-4 pb-4">
+              {loadingSwap ? (
+                <div className="flex justify-center py-8"><span className="w-5 h-5 border-2 border-zinc-200 border-t-zinc-600 rounded-full animate-spin" /></div>
+              ) : swapOptions.length === 0 ? (
+                <p className="text-center text-[13px] text-zinc-400 py-8">No other {swapCategory} items in your closet</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {swapOptions.map(item => (
+                    <button key={item.id} onClick={() => { if (onSwap) onSwap(swapCategory, item); setSwapCategory(null); }}
+                      className="aspect-square rounded-xl overflow-hidden bg-zinc-100 active:scale-95 transition-all relative">
+                      <img src={item.imageData} alt={item.name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-1.5 pt-4">
+                        <p className="text-[9px] font-medium text-white truncate">{item.name}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -43,10 +43,24 @@ export default function AddClothingModal({ onClose, onSaved }: Props) {
         const canvas = document.createElement("canvas");
         const max = 800;
         let { width: w, height: h } = img;
-        if (w > h) { if (w > max) { h = (h * max) / w; w = max; } }
-        else { if (h > max) { w = (w * max) / h; h = max; } }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
+
+        // If landscape, crop to center portrait
+        const isLandscape = w > h;
+        let sx = 0, sy = 0, sw = w, sh = h;
+        if (isLandscape) {
+          // Crop to center square first, then it becomes portrait-ish
+          const cropW = h * 0.75; // 3:4 aspect from the center
+          sx = Math.max(0, (w - cropW) / 2);
+          sw = Math.min(cropW, w);
+        }
+
+        // Scale down
+        let ow = sw, oh = sh;
+        if (ow > oh) { if (ow > max) { oh = (oh * max) / ow; ow = max; } }
+        else { if (oh > max) { ow = (ow * max) / oh; oh = max; } }
+
+        canvas.width = ow; canvas.height = oh;
+        canvas.getContext("2d")?.drawImage(img, sx, sy, sw, sh, 0, 0, ow, oh);
         const compressed = canvas.toDataURL("image/jpeg", 0.7);
         setImageData(compressed);
         setScanning(true);
