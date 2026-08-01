@@ -49,7 +49,6 @@ export default function AddClothingModal({ onClose, onSaved }: Props) {
         setImageData(compressed);
         setScanning(true);
         scanImage(compressed).then((scan) => {
-          setImageData(scan.enhancedImage);
           setPrimaryColor(scan.dominantColor);
           setCategory(scan.suggestedCategory);
           setName(scan.suggestedName);
