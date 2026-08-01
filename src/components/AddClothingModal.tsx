@@ -26,6 +26,8 @@ export default function AddClothingModal({ onClose, onSaved }: Props) {
   const [error, setError] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(false);
+  const [removingBg, setRemovingBg] = useState(false);
+  const [bgRemoved, setBgRemoved] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
@@ -62,6 +64,35 @@ export default function AddClothingModal({ onClose, onSaved }: Props) {
     };
     reader.readAsDataURL(file);
   }, []);
+
+  const removeBackground = async () => {
+    if (!imageData) return;
+    setRemovingBg(true);
+    setError("");
+    try {
+      const res = await fetch("/api/remove-bg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageData }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data?.setupRequired || data?.fallbackUrl) {
+          window.open(data.fallbackUrl || "https://www.remove.bg/upload", "_blank", "noopener,noreferrer");
+          throw new Error("For Canva-level removal, use remove.bg in the tab we opened or add REMOVE_BG_API_KEY in Vercel.");
+        }
+        throw new Error(data?.error || "Background removal failed");
+      }
+      if (data?.imageData) {
+        setImageData(data.imageData);
+        setBgRemoved(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Background removal failed");
+    } finally {
+      setRemovingBg(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!imageData || !name || !category || !primaryColor) { setError("Fill in all required fields"); return; }
@@ -155,25 +186,43 @@ export default function AddClothingModal({ onClose, onSaved }: Props) {
           {step === 2 && (
             <div className="space-y-4 animate-fade-up">
               {imageData && (
-                <div className="flex gap-4 items-start">
-                  <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-zinc-100 flex-shrink-0">
-                    <img src={imageData} alt="" className="w-full h-full object-cover" />
-                    <button onClick={() => { setImageData(null); setStep(1); setScanDone(false); setFit(""); }}
-                      className="absolute top-1 right-1 w-5 h-5 bg-black/40 rounded-full flex items-center justify-center text-white text-[9px]">✕</button>
-                  </div>
-                  {scanDone && (
-                    <div className="pt-0.5">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                          <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="4"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        </div>
-                        <span className="text-[11px] font-semibold text-green-600">Detected</span>
-                      </div>
-                      <p className="text-[11px] text-zinc-400">
-                        <strong className="text-zinc-600">{primaryColor}</strong> · {pattern} · {CATEGORIES.find(c => c.value === category)?.label || category}
-                      </p>
+                <div className="space-y-3">
+                  <div className="flex gap-4 items-start">
+                    <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-zinc-100 flex-shrink-0">
+                      <img src={imageData} alt="" className="w-full h-full object-cover" />
+                      <button onClick={() => { setImageData(null); setStep(1); setScanDone(false); setFit(""); setBgRemoved(false); }}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/40 rounded-full flex items-center justify-center text-white text-[9px]">✕</button>
                     </div>
-                  )}
+                    {scanDone && (
+                      <div className="pt-0.5 flex-1">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                            <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="4"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          </div>
+                          <span className="text-[11px] font-semibold text-green-600">Detected</span>
+                          {bgRemoved && <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">BG removed</span>}
+                        </div>
+                        <p className="text-[11px] text-zinc-400">
+                          <strong className="text-zinc-600">{primaryColor}</strong> · {pattern} · {CATEGORIES.find(c => c.value === category)?.label || category}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={removeBackground}
+                    disabled={removingBg}
+                    className="w-full h-10 rounded-xl bg-zinc-100 text-zinc-700 text-[12px] font-semibold hover:bg-zinc-200 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {removingBg ? (
+                      <><span className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-zinc-700 rounded-full animate-spin" /> Removing background...</>
+                    ) : (
+                      <><span>✨</span> AI Remove Background</>
+                    )}
+                  </button>
+                  <p className="text-[10px] text-zinc-400 -mt-1">
+                    Best quality needs remove.bg API. If not set, we&apos;ll open remove.bg in a new tab.
+                  </p>
                 </div>
               )}
 
