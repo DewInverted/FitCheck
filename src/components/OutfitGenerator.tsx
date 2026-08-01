@@ -71,7 +71,7 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
       <div className="mb-5 animate-fade-up">
         <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-3">Pick your vibe</p>
         <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1">
-          {STYLE_PRESETS.map((s) => (
+          {STYLE_PRESETS.filter(s => s.gender === "all" || s.gender === gender).map((s) => (
             <button key={s.id} onClick={() => setSelectedStyle(selectedStyle === s.id ? "" : s.id)}
               className={`flex-shrink-0 px-4 py-2 rounded-full text-[13px] font-medium transition-all whitespace-nowrap active:scale-95 ${
                 selectedStyle === s.id ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"

@@ -104,7 +104,7 @@ export default function Onboarding({ onComplete }: Props) {
             <p className="text-[14px] text-white/40 mb-5">This will be your default vibe</p>
 
             <div className="grid grid-cols-2 gap-2 mb-6 max-h-[48vh] overflow-y-auto no-scrollbar pr-1">
-              {STYLE_PRESETS.map((s, i) => (
+              {STYLE_PRESETS.filter(s => s.gender === "all" || s.gender === gender).map((s, i) => (
                 <button key={s.id} onClick={() => setStyle(s.id)}
                   className={`p-3.5 rounded-2xl border-2 text-left transition-all active:scale-[0.97] animate-fade-up ${
                     style === s.id ? "border-white bg-white/10" : "border-white/10 hover:border-white/20"

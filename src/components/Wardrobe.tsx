@@ -179,17 +179,21 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
       {selected && !selectMode && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl animate-slide-up" style={{ maxHeight: editing ? "70vh" : "55vh" }}>
-            {/* Handle + close */}
-            <div className="sticky top-0 bg-white z-10 rounded-t-3xl">
+          <div className="bg-white w-full max-w-lg rounded-t-3xl animate-slide-up" style={{ maxHeight: editing ? "85vh" : "55vh" }}>
+            {/* Handle + close/back */}
+            <div className="sticky top-0 bg-white z-10 rounded-t-3xl border-b border-zinc-100">
               <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-2.5" />
-              <div className="flex items-center justify-between px-4 py-1.5">
-                <button onClick={editing ? () => setEditing(false) : closeSheet} className="text-[14px] text-zinc-400 font-medium">{editing ? "← Back" : "Close"}</button>
-                <span className="text-[13px] font-semibold text-zinc-900">{editing ? "Edit" : "Details"}</span>
-                <div className="w-10" />
+              <div className="flex items-center justify-between px-4 py-2">
+                <button onClick={editing ? () => setEditing(false) : closeSheet} className="text-[14px] text-zinc-500 font-medium min-w-[50px]">{editing ? "← Back" : "Close"}</button>
+                <span className="text-[13px] font-semibold text-zinc-900">{editing ? "Edit Item" : "Details"}</span>
+                {editing ? (
+                  <button onClick={saveEdit} disabled={savingEdit} className="text-[14px] text-blue-500 font-semibold min-w-[50px] text-right disabled:opacity-50">
+                    {savingEdit ? "..." : "Save"}
+                  </button>
+                ) : <div className="min-w-[50px]" />}
               </div>
             </div>
-            <div className="overflow-y-auto" style={{ maxHeight: editing ? "calc(70vh - 50px)" : "calc(55vh - 50px)" }}>
+            <div className="overflow-y-auto" style={{ maxHeight: editing ? "calc(85vh - 55px)" : "calc(55vh - 55px)" }}>
 
             {!editing ? (
               <>
@@ -277,13 +281,7 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
                     </div>
                   </div>
                 )}
-                <div className="flex gap-2 pt-2">
-                  <button onClick={() => setEditing(false)} className="flex-1 h-11 rounded-xl bg-zinc-100 text-zinc-600 text-[13px] font-medium active:scale-[0.97] transition-all">Cancel</button>
-                  <button onClick={saveEdit} disabled={savingEdit}
-                    className="flex-1 h-11 rounded-xl bg-zinc-900 text-white text-[13px] font-semibold active:scale-[0.97] transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
-                    {savingEdit ? <><span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" /> Saving</> : "Save changes"}
-                  </button>
-                </div>
+                <div className="h-4" />{/* bottom spacing */}
               </div>
             )}
             </div>{/* end scroll wrapper */}

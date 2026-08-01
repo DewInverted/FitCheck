@@ -118,6 +118,7 @@ export interface StylePreset {
   label: string;
   emoji: string;
   description: string;
+  gender: "all" | "male" | "female"; // who this style is for
   colorPalette: string[]; // preferred color families
   preferredCategories: Record<string, string[]>; // preferred subcategories per category
   pinterestQuery: string;
@@ -127,7 +128,7 @@ export interface StylePreset {
 
 export const STYLE_PRESETS: StylePreset[] = [
   {
-    id: "streetwear",
+    id: "streetwear", gender: "all",
     label: "Streetwear",
     emoji: "🔥",
     description: "Oversized fits, sneakers, graphic tees, cargo pants",
@@ -143,7 +144,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Cap", "Crossbody Bag", "Watch", "Sunglasses"],
   },
   {
-    id: "old-money",
+    id: "old-money", gender: "all",
     label: "Old Money",
     emoji: "💎",
     description: "Clean, preppy, neutral tones, quality basics",
@@ -159,7 +160,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Watch", "Belt", "Sunglasses", "Tote Bag"],
   },
   {
-    id: "clean-girl",
+    id: "clean-girl", gender: "female",
     label: "Clean Girl",
     emoji: "✨",
     description: "Minimal, slicked back, neutral + earth tones",
@@ -175,7 +176,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Earrings", "Necklace", "Tote Bag", "Sunglasses"],
   },
   {
-    id: "minimalist",
+    id: "minimalist", gender: "all",
     label: "Minimalist",
     emoji: "🤍",
     description: "Neutral palette, simple silhouettes, timeless",
@@ -191,7 +192,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Watch", "Belt", "Tote Bag"],
   },
   {
-    id: "y2k",
+    id: "y2k", gender: "female",
     label: "Y2K",
     emoji: "💿",
     description: "Bold colors, low-rise, butterfly tops, chunky shoes",
@@ -207,7 +208,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Sunglasses", "Earrings", "Crossbody Bag", "Bracelet", "Ring"],
   },
   {
-    id: "casual-pinoy",
+    id: "casual-pinoy", gender: "all",
     label: "Casual Pinoy",
     emoji: "🇵🇭",
     description: "Comfy, breathable, perfect for PH weather",
@@ -223,7 +224,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Cap", "Watch", "Crossbody Bag", "Sunglasses"],
   },
   {
-    id: "smart-casual",
+    id: "smart-casual", gender: "all",
     label: "Smart Casual",
     emoji: "👔",
     description: "Polished but relaxed, office to dinner",
@@ -239,7 +240,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     accessorySuggestions: ["Watch", "Belt", "Bag", "Tie"],
   },
   {
-    id: "athleisure",
+    id: "athleisure", gender: "all",
     label: "Athleisure",
     emoji: "🏃",
     description: "Sporty comfort meets everyday style",
