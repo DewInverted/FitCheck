@@ -179,11 +179,11 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
       {selected && !selectMode && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up">
-            {/* Handle + close button */}
+          <div className="bg-white w-full max-w-lg rounded-t-3xl max-h-[55vh] overflow-y-auto animate-slide-up">
+            {/* Handle + close */}
             <div className="sticky top-0 bg-white z-10 rounded-t-3xl">
-              <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-3" />
-              <div className="flex items-center justify-between px-4 py-2">
+              <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-2.5" />
+              <div className="flex items-center justify-between px-4 py-1.5">
                 <button onClick={closeSheet} className="text-[14px] text-zinc-400 font-medium">Close</button>
                 <span className="text-[13px] font-semibold text-zinc-900">{editing ? "Edit" : "Details"}</span>
                 <div className="w-10" />
@@ -192,30 +192,28 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
 
             {!editing ? (
               <>
-                {/* Image — small, padded, no overlap */}
-                <div className="px-5 pb-3">
-                  <div className="aspect-square max-h-[240px] mx-auto bg-zinc-50 overflow-hidden rounded-2xl">
-                    <img src={selected.imageData} alt={selected.name} className="w-full h-full object-contain" />
+                {/* Image + info side by side */}
+                <div className="px-4 pb-2 flex gap-3">
+                  <div className="w-24 h-24 flex-shrink-0 bg-zinc-50 overflow-hidden rounded-xl">
+                    <img src={selected.imageData} alt={selected.name} className="w-full h-full object-cover" />
                   </div>
-                </div>
-                <div className="px-5 pb-5 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-[17px] font-semibold text-zinc-900">{selected.name}</p>
-                      <p className="text-[13px] text-zinc-400 mt-0.5">{selected.subcategory || selected.category}{selected.brand && ` · ${selected.brand}`}</p>
+                  <div className="flex-1 min-w-0 py-0.5">
+                    <p className="text-[16px] font-semibold text-zinc-900 truncate">{selected.name}</p>
+                    <p className="text-[12px] text-zinc-400 mt-0.5">{selected.subcategory || selected.category}{selected.brand && ` · ${selected.brand}`}</p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {[selected.primaryColor, (selected as Record<string, unknown>).fit as string | undefined, selected.pattern]
+                        .filter(Boolean).map(tag => (
+                          <span key={tag} className="h-5 px-2 rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-medium flex items-center">{tag}</span>
+                        ))}
                     </div>
-                    <button onClick={() => toggleFav(selected)}
-                      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${selected.isFavorite ? "bg-red-50 text-red-500" : "bg-zinc-100 text-zinc-400"}`}>
-                      {selected.isFavorite ? "♥" : "♡"}
-                    </button>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[selected.primaryColor, selected.secondaryColor, selected.pattern, (selected as Record<string, unknown>).fit as string | undefined, selected.season, selected.occasion]
-                      .filter(Boolean).map(tag => (
-                        <span key={tag} className="h-7 px-2.5 rounded-full bg-zinc-100 text-zinc-600 text-[11px] font-medium flex items-center">{tag}</span>
-                      ))}
-                  </div>
-                  <button onClick={startEdit} className="w-full h-11 rounded-xl text-[13px] font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 active:scale-[0.98] transition-all">Edit details</button>
+                  <button onClick={() => toggleFav(selected)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90 ${selected.isFavorite ? "bg-red-50 text-red-500" : "bg-zinc-100 text-zinc-400"}`}>
+                    {selected.isFavorite ? "♥" : "♡"}
+                  </button>
+                </div>
+                <div className="px-4 pb-4 space-y-2">
+                  <button onClick={startEdit} className="w-full h-10 rounded-xl text-[13px] font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 active:scale-[0.98] transition-all">Edit details</button>
                   {!confirmDelete ? (
                     <button onClick={() => setConfirmDelete(true)} className="w-full h-11 rounded-xl text-[13px] font-medium text-red-500 bg-red-50 hover:bg-red-100 active:scale-[0.98] transition-all">Remove item</button>
                   ) : (
