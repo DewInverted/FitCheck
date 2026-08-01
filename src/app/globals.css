@@ -90,6 +90,13 @@ body {
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* Dark mode */
+.dark body { background: #09090b; color: #fafafa; }
+.dark .skeleton {
+  background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
+  background-size: 200% 100%;
+}
+
 /* Glass morphism */
 .glass {
   background: rgba(255, 255, 255, 0.7);

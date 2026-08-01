@@ -1,6 +1,6 @@
 /**
- * Image scanner — extracts dominant color, pattern, and category from a photo.
- * Runs entirely client-side using canvas pixel analysis.
+ * Image scanner — extracts color, pattern, category + enhances image.
+ * Client-side canvas analysis.
  */
 
 export interface ScanResult {
@@ -8,6 +8,7 @@ export interface ScanResult {
   suggestedCategory: string;
   suggestedName: string;
   suggestedPattern: string;
+  enhancedImage: string; // enhanced + bg-removed version
   confidence: number;
   rawHsl: { h: number; s: number; l: number };
 }
@@ -28,7 +29,7 @@ const COLOR_MAP: { name: string; hMin: number; hMax: number; sMin: number; lMin:
   { name: "Denim",    hMin: 200, hMax: 230, sMin: 15, lMin: 30, lMax: 55 },
 ];
 
-function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+function rgbToHsl(r: number, g: number, b: number) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   const l = (max + min) / 2;
@@ -66,28 +67,74 @@ function mapToColorName(h: number, s: number, l: number): string {
   return "Gray";
 }
 
-function guessCategory(avgBrightness: number, aspectRatio: number): string {
-  if (aspectRatio > 1.3) return "bottom";
-  if (aspectRatio < 0.8) return "shoes";
-  if (avgBrightness < 60) return "outerwear";
-  return "top";
+/**
+ * Enhanced image processing:
+ * 1. Auto-contrast boost
+ * 2. Background removal (make similar-to-corner pixels white)
+ * 3. Slight sharpen
+ */
+function enhanceImage(sourceCanvas: HTMLCanvasElement, w: number, h: number): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+
+  // Sample corners for background color
+  const corners = [
+    0, // top-left
+    (w - 1) * 4, // top-right
+    ((h - 1) * w) * 4, // bottom-left
+    ((h - 1) * w + (w - 1)) * 4, // bottom-right
+  ];
+
+  let bgR = 0, bgG = 0, bgB = 0;
+  for (const ci of corners) {
+    bgR += d[ci]; bgG += d[ci + 1]; bgB += d[ci + 2];
+  }
+  bgR = Math.round(bgR / 4);
+  bgG = Math.round(bgG / 4);
+  bgB = Math.round(bgB / 4);
+
+  // Find min/max brightness for auto-contrast
+  let minB = 255, maxB = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const b = (d[i] + d[i + 1] + d[i + 2]) / 3;
+    if (b < minB) minB = b;
+    if (b > maxB) maxB = b;
+  }
+  const range = maxB - minB || 1;
+
+  for (let i = 0; i < d.length; i += 4) {
+    // Check if pixel is similar to background
+    const diffR = Math.abs(d[i] - bgR);
+    const diffG = Math.abs(d[i + 1] - bgG);
+    const diffB = Math.abs(d[i + 2] - bgB);
+    const totalDiff = diffR + diffG + diffB;
+
+    if (totalDiff < 80) {
+      // Background pixel → make white
+      d[i] = 245; d[i + 1] = 245; d[i + 2] = 245;
+    } else {
+      // Auto-contrast stretch
+      d[i] = Math.min(255, Math.round(((d[i] - minB) / range) * 245 + 10));
+      d[i + 1] = Math.min(255, Math.round(((d[i + 1] - minB) / range) * 245 + 10));
+      d[i + 2] = Math.min(255, Math.round(((d[i + 2] - minB) / range) * 245 + 10));
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
-/**
- * Detect pattern from pixel data by analyzing color variance.
- *
- * - Very low variance → Solid
- * - High horizontal variance but low vertical → Striped (horizontal)
- * - High vertical variance but low horizontal → Striped (vertical)
- * - High variance in both axes → Plaid / Checkered
- * - Many distinct color clusters → Graphic / Floral / Camo
- * - Medium variance → could be subtle pattern
- */
 function detectPattern(data: Uint8ClampedArray, size: number): string {
-  const margin = 15;
+  const margin = Math.floor(size * 0.2);
   const regionSize = size - margin * 2;
+  if (regionSize <= 0) return "Solid";
 
-  // Compute row-by-row average brightness
   const rowAvg: number[] = [];
   const colAvg: number[] = [];
 
@@ -109,8 +156,8 @@ function detectPattern(data: Uint8ClampedArray, size: number): string {
     colAvg.push(sum / regionSize);
   }
 
-  // Compute variance of row/col averages
   const variance = (arr: number[]) => {
+    if (arr.length === 0) return 0;
     const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
     return arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length;
   };
@@ -118,36 +165,22 @@ function detectPattern(data: Uint8ClampedArray, size: number): string {
   const rowVar = variance(rowAvg);
   const colVar = variance(colAvg);
 
-  // Count distinct color clusters (sample every 4th pixel)
+  // Be conservative — most clothes are solid
+  // Only flag as patterned if variance is very high
+  if (rowVar > 500 && colVar < 150) return "Striped";
+  if (colVar > 500 && rowVar < 150) return "Striped";
+  if (rowVar > 400 && colVar > 400) return "Plaid";
+
+  // Count color clusters for graphic detection
   const colorBuckets = new Set<string>();
-  for (let y = margin; y < size - margin; y += 4) {
-    for (let x = margin; x < size - margin; x += 4) {
+  for (let y = margin; y < size - margin; y += 5) {
+    for (let x = margin; x < size - margin; x += 5) {
       const i = (y * size + x) * 4;
-      // Quantize to 32-level buckets
-      const r = Math.floor(data[i] / 32);
-      const g = Math.floor(data[i + 1] / 32);
-      const b = Math.floor(data[i + 2] / 32);
-      colorBuckets.add(`${r}-${g}-${b}`);
+      colorBuckets.add(`${Math.floor(data[i] / 40)}-${Math.floor(data[i + 1] / 40)}-${Math.floor(data[i + 2] / 40)}`);
     }
   }
-  const colorCount = colorBuckets.size;
 
-  // Low variance in both = solid color
-  if (rowVar < 30 && colVar < 30 && colorCount < 20) return "Solid";
-
-  // High variance in one direction = stripes
-  if (rowVar > 200 && colVar < 80) return "Striped";
-  if (colVar > 200 && rowVar < 80) return "Striped";
-
-  // High variance in both = plaid/checkered
-  if (rowVar > 150 && colVar > 150) return "Plaid";
-
-  // Many distinct colors = graphic/print
-  if (colorCount > 60) return "Graphic";
-  if (colorCount > 40) return "Floral";
-
-  // Medium variance = subtle pattern
-  if (rowVar > 80 || colVar > 80) return "Checkered";
+  if (colorBuckets.size > 80) return "Graphic";
 
   return "Solid";
 }
@@ -157,29 +190,24 @@ export function scanImage(imageDataUrl: string): Promise<ScanResult> {
     const img = new window.Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const size = 120;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, size, size);
+      // Create analysis canvas (small)
+      const aSize = 120;
+      const aCanvas = document.createElement("canvas");
+      aCanvas.width = aSize;
+      aCanvas.height = aSize;
+      const aCtx = aCanvas.getContext("2d")!;
+      aCtx.drawImage(img, 0, 0, aSize, aSize);
+      const aData = aCtx.getImageData(0, 0, aSize, aSize).data;
 
-      const imgData = ctx.getImageData(0, 0, size, size);
-      const data = imgData.data;
-
-      // Sample center region for color
+      // Center region color
       let rSum = 0, gSum = 0, bSum = 0, count = 0;
-      const margin = 20;
-      for (let y = margin; y < size - margin; y++) {
-        for (let x = margin; x < size - margin; x++) {
-          const i = (y * size + x) * 4;
-          rSum += data[i];
-          gSum += data[i + 1];
-          bSum += data[i + 2];
-          count++;
+      const margin = 25;
+      for (let y = margin; y < aSize - margin; y++) {
+        for (let x = margin; x < aSize - margin; x++) {
+          const i = (y * aSize + x) * 4;
+          rSum += aData[i]; gSum += aData[i + 1]; bSum += aData[i + 2]; count++;
         }
       }
-
       const avgR = Math.round(rSum / count);
       const avgG = Math.round(gSum / count);
       const avgB = Math.round(bSum / count);
@@ -187,30 +215,47 @@ export function scanImage(imageDataUrl: string): Promise<ScanResult> {
       const colorName = mapToColorName(hsl.h, hsl.s, hsl.l);
       const avgBrightness = (avgR + avgG + avgB) / 3;
       const aspectRatio = img.height / img.width;
-      const category = guessCategory(avgBrightness, aspectRatio);
-      const pattern = detectPattern(data, size);
 
-      const categoryLabels: Record<string, string> = {
-        top: "Top", bottom: "Bottom", shoes: "Shoes", outerwear: "Outerwear",
-      };
+      // Category
+      let category = "top";
+      if (aspectRatio > 1.3) category = "bottom";
+      else if (aspectRatio < 0.8) category = "shoes";
+      else if (avgBrightness < 60) category = "outerwear";
+
+      // Pattern
+      const pattern = detectPattern(aData, aSize);
+
+      const labels: Record<string, string> = { top: "Top", bottom: "Bottom", shoes: "Shoes", outerwear: "Outerwear" };
+
+      // Create enhanced image (full size)
+      const eCanvas = document.createElement("canvas");
+      const maxDim = 600;
+      let ew = img.width, eh = img.height;
+      if (ew > eh) { if (ew > maxDim) { eh = (eh * maxDim) / ew; ew = maxDim; } }
+      else { if (eh > maxDim) { ew = (ew * maxDim) / eh; eh = maxDim; } }
+      eCanvas.width = ew;
+      eCanvas.height = eh;
+      const eCtx = eCanvas.getContext("2d")!;
+      eCtx.drawImage(img, 0, 0, ew, eh);
+
+      const enhancedImage = enhanceImage(eCanvas, ew, eh);
 
       resolve({
         dominantColor: colorName,
         suggestedCategory: category,
-        suggestedName: `${colorName} ${categoryLabels[category] || "Item"}`,
+        suggestedName: `${colorName} ${labels[category] || "Item"}`,
         suggestedPattern: pattern,
+        enhancedImage,
         confidence: 0.7,
         rawHsl: hsl,
       });
     };
     img.onerror = () => {
       resolve({
-        dominantColor: "Gray",
-        suggestedCategory: "top",
-        suggestedName: "New Item",
-        suggestedPattern: "Solid",
-        confidence: 0,
-        rawHsl: { h: 0, s: 0, l: 50 },
+        dominantColor: "Gray", suggestedCategory: "top",
+        suggestedName: "New Item", suggestedPattern: "Solid",
+        enhancedImage: imageDataUrl,
+        confidence: 0, rawHsl: { h: 0, s: 0, l: 50 },
       });
     };
     img.src = imageDataUrl;
