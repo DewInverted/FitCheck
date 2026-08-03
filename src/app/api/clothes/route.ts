@@ -20,18 +20,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      name,
-      category,
-      subcategory,
-      primaryColor,
-      secondaryColor,
-      pattern,
-      fit,
-      season,
-      occasion,
-      brand,
-      imageData,
-      tags,
+      name, category, subcategory, primaryColor, secondaryColor,
+      pattern, fit, season, occasion, brand, imageData, tags,
     } = body;
 
     if (!name || !category || !primaryColor || !imageData) {
@@ -44,8 +34,7 @@ export async function POST(request: NextRequest) {
     const [item] = await db
       .insert(clothingItems)
       .values({
-        name,
-        category,
+        name, category,
         subcategory: subcategory || null,
         primaryColor,
         secondaryColor: secondaryColor || null,

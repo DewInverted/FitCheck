@@ -16,17 +16,19 @@ export async function POST(request: NextRequest) {
     const season = typeof body.season === "string" ? body.season : undefined;
     const styleId = typeof body.styleId === "string" ? body.styleId : undefined;
     const count = typeof body.count === "number" ? body.count : 8;
+    const gender = typeof body.gender === "string" ? body.gender : undefined;
+    const showSuggested = typeof body.showSuggested === "boolean" ? body.showSuggested : true;
 
     const items = await db.select().from(clothingItems);
 
     if (items.length < 2) {
       return NextResponse.json(
-        { error: "You need at least 2 clothing items to generate outfits. Try loading demo data first!" },
+        { error: "You need at least 2 clothing items to generate outfits. Add more items first!" },
         { status: 400 }
       );
     }
 
-    const outfitResults = generateOutfits(items, { occasion, season, count, styleId });
+    const outfitResults = generateOutfits(items, { occasion, season, count, styleId, gender, showSuggested });
 
     if (outfitResults.length === 0) {
       return NextResponse.json(
@@ -35,13 +37,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Clean response: strip stylePreset (complex obj), keep only what client needs
     const cleaned = outfitResults.map((o) => ({
       items: o.items,
       score: o.score,
       description: o.description,
       style: o.style,
+      source: o.source,
       accessories: o.accessories,
+      suggestedPieces: o.suggestedPieces,
       inspoLinks: o.inspoLinks,
     }));
 

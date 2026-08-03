@@ -3,47 +3,51 @@ import { clothingItems } from "@/db/schema";
 import { suggestMissingItems } from "@/lib/outfit-generator";
 import { NextRequest, NextResponse } from "next/server";
 
-// Detailed pairing tips based on item type + color + gender
-function getPairingTip(subcategory: string, color: string, gender: string, _style: string): string {
+function getPairingTip(subcategory: string, color: string, gender: string): string {
   const g = gender === "female" ? "women" : "men";
   const tips: Record<string, string[]> = {
     "T-Shirt": [
-      `A ${color.toLowerCase()} tee is the foundation of any outfit. Pair it with jeans and sneakers for an easy casual look, or tuck it into high-waisted pants for a more polished vibe.`,
-      `Layer this under an open button-down or denim jacket. For ${g}, a ${color.toLowerCase()} tee works with literally everything in your closet.`,
+      `A ${color.toLowerCase()} tee is the foundation of any outfit. Pair it with jeans and sneakers for an easy casual look.`,
+      `Layer this under an open button-down or denim jacket. For ${g}, a ${color.toLowerCase()} tee works with literally everything.`,
     ],
     "Shirt": [
-      `Roll the sleeves to the elbow for a relaxed smart-casual look. A ${color.toLowerCase()} shirt pairs perfectly with dark jeans or chinos. Leave the top button open.`,
-      `Tuck into trousers for formal, or leave untucked over a plain tee for a layered streetwear vibe.`,
+      `Roll the sleeves to the elbow for a relaxed smart-casual look. A ${color.toLowerCase()} shirt pairs perfectly with dark jeans or chinos.`,
+    ],
+    "Polo": [
+      `A ${color.toLowerCase()} polo is versatile — tuck it into chinos for old money vibes, or wear it loose with shorts for casual days.`,
     ],
     "Jeans": [
-      `${color} jeans are a wardrobe staple. They go with white tees, black tops, flannel shirts — basically anything. Cuff the hem slightly for a cleaner look.`,
-      `For ${g}: pair with sneakers for casual or loafers/boots to dress them up. A fitted tee + ${color.toLowerCase()} jeans is an unbeatable combo.`,
+      `${color} jeans are a wardrobe staple. They go with white tees, black tops, flannel shirts — basically anything.`,
     ],
     "Chinos": [
-      `${color} chinos bridge the gap between casual and smart. Pair with a polo or button-down for office looks, or a graphic tee for weekends.`,
-      `These work great with white sneakers or loafers. Add a belt to complete the look.`,
+      `${color} chinos bridge the gap between casual and smart. Pair with a polo or button-down for office looks.`,
     ],
     "Sneakers": [
-      `${color} sneakers are the most versatile footwear you can own. They work with jeans, joggers, chinos, shorts — everything except maybe a suit.`,
-      `Keep them clean for maximum impact. ${color} sneakers especially pop when the rest of your outfit is darker tones.`,
+      `${color} sneakers are the most versatile footwear you can own. They work with jeans, joggers, chinos — everything.`,
+    ],
+    "Loafers": [
+      `${color} loafers instantly dress up any outfit. Perfect for smart casual and old money looks.`,
     ],
     "Watch": [
-      `A ${color.toLowerCase()} watch is the #1 accessory upgrade. It shows attention to detail and works with every outfit from casual to formal.`,
-      `Match the watch tone to your belt/shoes for a put-together look. ${color} works best with neutral outfits.`,
+      `A ${color.toLowerCase()} watch is the #1 accessory upgrade. It shows attention to detail and works with every outfit.`,
     ],
     "Sunglasses": [
-      `${color} frames are classic and go with everything. Essential for the PH sun, and they instantly add a cool factor to any outfit.`,
-      `Choose a shape that complements your face — aviators for round faces, round frames for angular faces.`,
+      `${color} frames are classic and go with everything. Essential for the PH sun.`,
     ],
     "Crossbody Bag": [
-      `A ${color.toLowerCase()} crossbody adds functionality and style. Wear it across the body for a streetwear look, or over one shoulder for a cleaner vibe.`,
-      `${color} is versatile — it matches most outfits without clashing. Great for everyday carry.`,
+      `A ${color.toLowerCase()} crossbody adds functionality and style. Wear it across the body for a streetwear look.`,
     ],
     "Hoodie": [
-      `Layer it under a denim or bomber jacket when it's cold. On its own, pair with joggers or jeans. A ${color.toLowerCase()} hoodie is a streetwear essential.`,
+      `Layer it under a denim or bomber jacket. A ${color.toLowerCase()} hoodie is a streetwear essential.`,
     ],
     "Cargo Pants": [
-      `The utility look is in. Pair ${color.toLowerCase()} cargos with a fitted tee and chunky sneakers for a solid streetwear fit. Keep the top simple — the pants are the statement.`,
+      `Pair ${color.toLowerCase()} cargos with a fitted tee and chunky sneakers for a solid streetwear fit.`,
+    ],
+    "Blazer": [
+      `A ${color.toLowerCase()} blazer elevates any basic outfit. Throw it over a tee for instant sophistication.`,
+    ],
+    "Turtleneck": [
+      `A ${color.toLowerCase()} turtleneck is the cornerstone of dark academia and old money aesthetics.`,
     ],
   };
 
@@ -51,38 +55,20 @@ function getPairingTip(subcategory: string, color: string, gender: string, _styl
   if (options && options.length > 0) {
     return options[Math.floor(Math.random() * options.length)];
   }
-  return `A ${color.toLowerCase()} ${subcategory.toLowerCase()} pairs well with neutral tones like white, black, and gray. Mix with contrasting colors for a bolder look.`;
+  return `A ${color.toLowerCase()} ${subcategory.toLowerCase()} pairs well with neutral tones. Mix with contrasting colors for a bolder look.`;
 }
 
 function getStyleContext(subcategory: string, style: string): string {
   const styleNames: Record<string, string> = {
-    streetwear: "Streetwear", "old-money": "Old Money", "clean-girl": "Clean Girl",
-    minimalist: "Minimalist", y2k: "Y2K", "casual-pinoy": "Casual Pinoy",
+    streetwear: "Streetwear", "old-money": "Old Money",
+    minimalist: "Minimalist", "casual-pinoy": "Casual Pinoy",
     "smart-casual": "Smart Casual", athleisure: "Athleisure",
+    "dark-academia": "Dark Academia", grunge: "Grunge",
+    hypebeast: "Hypebeast", techwear: "Techwear",
   };
   const name = styleNames[style];
   if (!name) return "";
-
-  const contexts: Record<string, Record<string, string>> = {
-    streetwear: {
-      "T-Shirt": "Oversized fit is key for streetwear. Let it hang loose over your pants.",
-      Jeans: "Go for wide-leg or baggy cuts. Skinny jeans are out for street style.",
-      Sneakers: "Chunky or retro runners are the move. AF1s, Dunks, or New Balance 550s.",
-      Hoodie: "The streetwear uniform. Layer it right and you're golden.",
-      "Cargo Pants": "Cargos are a streetwear staple right now. Pair with any top and you're set.",
-    },
-    "old-money": {
-      Shirt: "Linen or oxford cloth in muted tones. Think Ralph Lauren, not party shirt.",
-      Chinos: "Tailored fit, no cargo pockets. Classic old money bottom.",
-      Loafers: "Penny loafers or driving mocs. The old money shoe of choice.",
-    },
-    minimalist: {
-      "T-Shirt": "Stick to one solid color, no graphics. Quality over quantity.",
-      Jeans: "Clean dark wash or black. No distressing, no rips.",
-    },
-  };
-
-  return contexts[style]?.[subcategory] || (name ? `This fits well with the ${name} aesthetic.` : "");
+  return `This fits well with the ${name} aesthetic.`;
 }
 
 export async function GET(request: NextRequest) {
@@ -92,11 +78,11 @@ export async function GET(request: NextRequest) {
     const style = searchParams.get("style") || "";
 
     const items = await db.select().from(clothingItems);
-    const suggestions = suggestMissingItems(items);
+    const suggestions = suggestMissingItems(items, style, gender);
 
     const detailed = suggestions.map((s) => ({
       ...s,
-      pairingTip: getPairingTip(s.subcategory, s.colors[0], gender, style),
+      pairingTip: getPairingTip(s.subcategory, s.colors[0], gender),
       styleContext: getStyleContext(s.subcategory, style),
       shoppingLinks: [
         {

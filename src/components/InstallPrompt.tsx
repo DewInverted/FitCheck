@@ -13,12 +13,10 @@ export default function InstallPrompt() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    // Register service worker
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
 
-    // Check if already installed
     if (window.matchMedia("(display-mode: standalone)").matches) {
       setInstalled(true);
       return;
@@ -27,7 +25,6 @@ export default function InstallPrompt() {
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      // Show after a short delay so it's not jarring
       setTimeout(() => setShow(true), 3000);
     };
 

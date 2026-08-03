@@ -4,29 +4,41 @@ import { useState, useRef } from "react";
 import type { ClothingItem } from "@/db/schema";
 import { OCCASIONS, SEASONS, STYLE_PRESETS } from "@/lib/colors";
 import type { AccessorySuggestion } from "@/lib/colors";
+import type { SuggestedPiece } from "@/lib/outfit-generator";
 
 interface OutfitResult {
   items: ClothingItem[];
   score: number;
   description: string;
   style: string;
+  source: "closet" | "suggested" | "mixed";
   accessories: AccessorySuggestion[];
+  suggestedPieces: SuggestedPiece[];
   inspoLinks: { pinterest: string; tiktok: string; instagram: string };
 }
 
-export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { defaultStyle?: string; gender?: string }) {
+interface Props {
+  defaultStyle?: string;
+  gender?: string;
+  showSuggested?: boolean;
+  onToggleSuggested?: (val: boolean) => void;
+}
+
+export default function OutfitGenerator({ defaultStyle = "", gender = "", showSuggested = true, onToggleSuggested }: Props) {
   const [outfits, setOutfits] = useState<OutfitResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [occasion, setOccasion] = useState("");
   const [season, setSeason] = useState("");
   const [selectedStyle, setSelectedStyle] = useState(defaultStyle);
-  void gender; // used for future gender-aware filtering
   const [error, setError] = useState("");
   const [generated, setGenerated] = useState(false);
   const [activeOutfit, setActiveOutfit] = useState(0);
   const [savedOutfits, setSavedOutfits] = useState<Set<number>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+  const [suggestedOn, setSuggestedOn] = useState(showSuggested);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  const filteredPresets = STYLE_PRESETS.filter(s => s.gender === "all" || s.gender === gender);
 
   const generate = async () => {
     setLoading(true);
@@ -37,7 +49,14 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
       const res = await fetch("/api/outfits/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ occasion: occasion || undefined, season: season || undefined, styleId: selectedStyle || undefined, count: 6 }),
+        body: JSON.stringify({
+          occasion: occasion || undefined,
+          season: season || undefined,
+          styleId: selectedStyle || undefined,
+          count: 8,
+          gender,
+          showSuggested: suggestedOn,
+        }),
       });
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("application/json")) throw new Error("Server error. Reload and try again.");
@@ -57,21 +76,44 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
       const res = await fetch("/api/outfits/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `${outfit.style} #${idx + 1}`, itemIds: outfit.items.map((i) => i.id), occasion: occasion || null, season: season || null }),
+        body: JSON.stringify({
+          name: `${outfit.style} #${idx + 1}`,
+          itemIds: outfit.items.map((i) => i.id),
+          occasion: occasion || null,
+          season: season || null,
+          style: outfit.style,
+          source: outfit.source,
+        }),
       });
       if (res.ok) setSavedOutfits((p) => new Set(p).add(idx));
     } catch {}
   };
 
-  const current = outfits[activeOutfit];
+  const toggleSuggested = () => {
+    const newVal = !suggestedOn;
+    setSuggestedOn(newVal);
+    if (onToggleSuggested) onToggleSuggested(newVal);
+    // Also persist
+    fetch("/api/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showSuggested: newVal }),
+    }).catch(() => {});
+  };
+
+  const displayedOutfits = suggestedOn
+    ? outfits
+    : outfits.filter(o => o.source === "closet");
+
+  const current = displayedOutfits[activeOutfit];
 
   return (
     <div>
-      {/* Style chips */}
+      {/* Style chips — gender filtered */}
       <div className="mb-5 animate-fade-up">
         <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-3">Pick your vibe</p>
         <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1">
-          {STYLE_PRESETS.filter(s => s.gender === "all" || s.gender === gender).map((s) => (
+          {filteredPresets.map((s) => (
             <button key={s.id} onClick={() => setSelectedStyle(selectedStyle === s.id ? "" : s.id)}
               className={`flex-shrink-0 px-4 py-2 rounded-full text-[13px] font-medium transition-all whitespace-nowrap active:scale-95 ${
                 selectedStyle === s.id ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
@@ -82,14 +124,26 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
         </div>
       </div>
 
-      {/* Filters */}
-      <button onClick={() => setShowFilters(!showFilters)}
-        className="text-[12px] text-zinc-400 font-medium mb-3 flex items-center gap-1 hover:text-zinc-600 transition-colors">
-        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
-        </svg>
-        {showFilters ? "Hide filters" : "Filters"}
-      </button>
+      {/* Toggle suggested outfits + Filters */}
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => setShowFilters(!showFilters)}
+          className="text-[12px] text-zinc-400 font-medium flex items-center gap-1 hover:text-zinc-600 transition-colors">
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+          </svg>
+          {showFilters ? "Hide filters" : "Filters"}
+        </button>
+
+        {/* Toggle for suggested outfits */}
+        <button onClick={toggleSuggested}
+          className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
+          <span>{suggestedOn ? "Suggestions ON" : "Suggestions OFF"}</span>
+          <div className={`w-9 h-5 rounded-full relative transition-colors ${suggestedOn ? "bg-zinc-900" : "bg-zinc-200"}`}>
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${suggestedOn ? "left-[18px]" : "left-0.5"}`} />
+          </div>
+        </button>
+      </div>
+
       {showFilters && (
         <div className="grid grid-cols-2 gap-3 mb-4 animate-fade-up">
           <select value={occasion} onChange={(e) => setOccasion(e.target.value)}
@@ -114,13 +168,13 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
 
       {error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-[13px] animate-fade-up">{error}</div>}
 
-      {/* ── Results ── */}
-      {generated && outfits.length > 0 && (
+      {/* Results */}
+      {generated && displayedOutfits.length > 0 && (
         <div ref={resultsRef} className="animate-fade-up">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">{outfits.length} looks</p>
+            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">{displayedOutfits.length} looks</p>
             <div className="flex gap-1.5">
-              {outfits.map((_, i) => (
+              {displayedOutfits.map((_, i) => (
                 <button key={i} onClick={() => setActiveOutfit(i)}
                   className={`h-2 rounded-full transition-all duration-300 ${i === activeOutfit ? "bg-zinc-900 w-5" : "bg-zinc-200 w-2"}`} />
               ))}
@@ -130,14 +184,15 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
             <OutfitCard key={activeOutfit} outfit={current} index={activeOutfit}
               saved={savedOutfits.has(activeOutfit)} onSave={() => save(current, activeOutfit)}
               onPrev={activeOutfit > 0 ? () => setActiveOutfit((p) => p - 1) : undefined}
-              onNext={activeOutfit < outfits.length - 1 ? () => setActiveOutfit((p) => p + 1) : undefined}
+              onNext={activeOutfit < displayedOutfits.length - 1 ? () => setActiveOutfit((p) => p + 1) : undefined}
               onSwap={(cat, newItem) => {
                 setOutfits(prev => prev.map((o, i) => {
                   if (i !== activeOutfit) return o;
                   const newItems = o.items.map(item => item.category === cat ? newItem : item);
                   return { ...o, items: newItems, description: newItems.map(it => it.name).join(" + ") };
                 }));
-              }} />
+              }}
+              gender={gender} />
           )}
         </div>
       )}
@@ -154,7 +209,7 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
         </div>
       )}
 
-      {generated && outfits.length === 0 && !error && (
+      {generated && displayedOutfits.length === 0 && !error && (
         <div className="text-center py-14 animate-fade-up">
           <p className="text-[15px] font-semibold text-zinc-700 mb-1">No combinations found</p>
           <p className="text-[13px] text-zinc-400">Try a different style or add more items</p>
@@ -166,21 +221,27 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "" }: { de
 
 /* ════════ Outfit Card ════════ */
 
-function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
+function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gender }: {
   outfit: OutfitResult; index: number; saved: boolean; onSave: () => void;
   onPrev?: () => void; onNext?: () => void;
   onSwap?: (category: string, newItem: ClothingItem) => void;
+  gender?: string;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const [swapCategory, setSwapCategory] = useState<string | null>(null);
   const [swapOptions, setSwapOptions] = useState<ClothingItem[]>([]);
   const [loadingSwap, setLoadingSwap] = useState(false);
+  void gender;
 
   const top = outfit.items.find((i) => i.category === "top");
   const bottom = outfit.items.find((i) => i.category === "bottom");
   const shoes = outfit.items.find((i) => i.category === "shoes");
   const outer = outfit.items.find((i) => i.category === "outerwear");
   const scoreLabel = outfit.score >= 90 ? "Perfect" : outfit.score >= 80 ? "Great" : outfit.score >= 65 ? "Good" : "OK";
+
+  // Source label badge
+  const sourceLabel = outfit.source === "closet" ? "From your closet" : outfit.source === "suggested" ? "Suggested outfit" : "Mixed";
+  const sourceBg = outfit.source === "closet" ? "bg-green-100 text-green-700" : outfit.source === "suggested" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700";
 
   const openSwap = async (cat: string) => {
     setLoadingSwap(true);
@@ -211,28 +272,29 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
         )}
 
         {/* Badges */}
-        <div className="absolute top-3 left-3 z-10">
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
           <span className="bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">Look {index + 1}</span>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold shadow-sm ${sourceBg}`}>{sourceLabel}</span>
         </div>
         <div className="absolute top-3 right-3 z-10">
           <span className="bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow-sm">{outfit.score} · {scoreLabel}</span>
         </div>
 
-        {/* ── Stacked outfit with drop-in animation ── */}
+        {/* Stacked outfit */}
         <div className="flex justify-center py-8 px-4">
           <div className="relative">
-            {/* Outerwear — floats to the side */}
             {outer && (
               <div className="absolute -right-5 top-0 z-20 rotate-[8deg] animate-pop-in" style={{ animationDelay: "0.4s" }}>
-                <div className="w-[60px] h-[60px] rounded-xl overflow-hidden border-[3px] border-white shadow-lg bg-white">
-                  <img src={outer.imageData} alt={outer.name} className="w-full h-full object-cover" />
-                </div>
-                <p className="text-[8px] text-zinc-400 text-center mt-1 font-medium w-[60px] truncate">{outer.name}</p>
+                <button onClick={() => openSwap("outerwear")} className="group">
+                  <div className="w-[60px] h-[60px] rounded-xl overflow-hidden border-[3px] border-white shadow-lg bg-white">
+                    <img src={outer.imageData} alt={outer.name} className="w-full h-full object-cover" />
+                  </div>
+                  <p className="text-[8px] text-zinc-400 text-center mt-1 font-medium w-[60px] truncate">{outer.name}</p>
+                </button>
               </div>
             )}
 
             <div className="flex flex-col items-center">
-              {/* Top — tap to swap */}
               <button onClick={() => openSwap("top")} className="w-[160px] aspect-[4/5] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white relative z-[1] animate-stack-drop group"
                 style={{ animationDelay: "0.05s" }}>
                 {top ? <img src={top.imageData} alt={top.name} className="w-full h-full object-cover" />
@@ -242,7 +304,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
                 </div>
               </button>
 
-              {/* Bottom — tap to swap */}
               <button onClick={() => openSwap("bottom")} className="w-[144px] aspect-[3/4] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white -mt-3 relative z-[2] animate-stack-drop group"
                 style={{ animationDelay: "0.15s" }}>
                 {bottom ? <img src={bottom.imageData} alt={bottom.name} className="w-full h-full object-cover" />
@@ -252,7 +313,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
                 </div>
               </button>
 
-              {/* Shoes — tap to swap */}
               <button onClick={() => openSwap("shoes")} className="w-[108px] aspect-[5/4] rounded-xl overflow-hidden border-[3px] border-white shadow-md bg-white -mt-3 relative z-[3] animate-stack-drop group"
                 style={{ animationDelay: "0.25s" }}>
                 {shoes ? <img src={shoes.imageData} alt={shoes.name} className="w-full h-full object-cover" />
@@ -265,6 +325,28 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
           </div>
         </div>
       </div>
+
+      {/* Suggested pieces — what to buy */}
+      {outfit.suggestedPieces.length > 0 && (
+        <div className="mt-3 bg-orange-50 rounded-2xl p-3 animate-fade-up">
+          <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-widest mb-2">🛒 Suggested items to complete this look</p>
+          <div className="space-y-2">
+            {outfit.suggestedPieces.map((piece, i) => (
+              <a key={i} href={piece.shopUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 p-2 rounded-xl bg-white hover:bg-orange-100/50 transition-colors active:scale-[0.98]">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center text-[16px] flex-shrink-0">
+                  {piece.category === "top" ? "👕" : piece.category === "bottom" ? "👖" : piece.category === "shoes" ? "👟" : "🧥"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold text-zinc-800">{piece.color} {piece.subcategory}</p>
+                  <p className="text-[10px] text-zinc-500 truncate">{piece.reason}</p>
+                </div>
+                <span className="text-[10px] text-orange-500 font-medium flex-shrink-0">Shop →</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Item chips */}
       <div className="mt-3 flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
@@ -343,7 +425,7 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap }: {
             <div className="sticky top-0 bg-white z-10 rounded-t-3xl">
               <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-2.5" />
               <div className="flex items-center justify-between px-4 py-2">
-                <button onClick={() => setSwapCategory(null)} className="text-[14px] text-zinc-400 font-medium">Cancel</button>
+                <button onClick={() => setSwapCategory(null)} className="text-[14px] text-zinc-400 font-medium min-h-[44px] flex items-center">Cancel</button>
                 <span className="text-[13px] font-semibold text-zinc-900">Swap {swapCategory}</span>
                 <div className="w-12" />
               </div>

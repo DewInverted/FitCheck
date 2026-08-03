@@ -9,13 +9,24 @@ import {
   type StylePreset,
 } from "./colors";
 
+export interface SuggestedPiece {
+  category: string;
+  subcategory: string;
+  color: string;
+  reason: string;
+  shopQuery: string;
+  shopUrl: string;
+}
+
 export interface OutfitResult {
   items: ClothingItem[];
   score: number;
   description: string;
   style: string;
+  source: "closet" | "suggested" | "mixed";
   stylePreset?: StylePreset;
   accessories: AccessorySuggestion[];
+  suggestedPieces: SuggestedPiece[];
   inspoLinks: {
     pinterest: string;
     tiktok: string;
@@ -24,9 +35,8 @@ export interface OutfitResult {
 }
 
 function scoreOutfit(items: ClothingItem[], stylePreset?: StylePreset): number {
-  let score = 50; // base score
+  let score = 50;
 
-  // Check color compatibility
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
       if (areColorsCompatible(items[i].primaryColor, items[j].primaryColor)) {
@@ -37,7 +47,6 @@ function scoreOutfit(items: ClothingItem[], stylePreset?: StylePreset): number {
     }
   }
 
-  // Bonus for neutral base (black, white, gray, navy bottoms)
   const bottom = items.find((i) => i.category === "bottom");
   if (bottom) {
     const family = getColorFamily(bottom.primaryColor);
@@ -46,29 +55,23 @@ function scoreOutfit(items: ClothingItem[], stylePreset?: StylePreset): number {
     }
   }
 
-  // Bonus for matching occasion
   const occasions = items.map((i) => i.occasion).filter(Boolean);
   if (occasions.length > 1 && new Set(occasions).size === 1) {
     score += 15;
   }
 
-  // Bonus for matching season
   const seasons = items.map((i) => i.season).filter((s) => s && s !== "all");
   if (seasons.length > 1 && new Set(seasons).size === 1) {
     score += 10;
   }
 
-  // Style preset bonuses
   if (stylePreset) {
-    // Bonus if item colors match the style's preferred palette
     for (const item of items) {
       const colorFam = getColorFamily(item.primaryColor);
       if (stylePreset.colorPalette.includes(colorFam)) {
         score += 5;
       }
     }
-
-    // Bonus if subcategory matches the style's preferred categories
     for (const item of items) {
       const prefs = stylePreset.preferredCategories[item.category];
       if (prefs && item.subcategory && prefs.includes(item.subcategory)) {
@@ -77,7 +80,6 @@ function scoreOutfit(items: ClothingItem[], stylePreset?: StylePreset): number {
     }
   }
 
-  // Cap score
   return Math.max(0, Math.min(100, score));
 }
 
@@ -116,6 +118,79 @@ function buildInspoLinks(items: ClothingItem[], stylePreset?: StylePreset) {
   };
 }
 
+// Analyze what categories the user is missing for a given style
+function analyzeStyleGap(
+  items: ClothingItem[],
+  stylePreset: StylePreset
+): { category: string; hasMatch: boolean; bestMatch: ClothingItem | null; suggestedPiece: SuggestedPiece | null }[] {
+  const categories = ["top", "bottom", "shoes"];
+  const results: { category: string; hasMatch: boolean; bestMatch: ClothingItem | null; suggestedPiece: SuggestedPiece | null }[] = [];
+
+  for (const cat of categories) {
+    const prefs = stylePreset.preferredCategories[cat] || [];
+    const palette = stylePreset.colorPalette;
+    const catItems = items.filter((i) => i.category === cat);
+
+    // Check if any item matches the style
+    const styleMatches = catItems.filter((i) => {
+      const subMatch = !prefs.length || (i.subcategory && prefs.includes(i.subcategory));
+      const colorMatch = palette.includes(getColorFamily(i.primaryColor));
+      return subMatch && colorMatch;
+    });
+
+    // Partial matches (at least subcategory matches)
+    const partialMatches = catItems.filter((i) => {
+      return i.subcategory && prefs.includes(i.subcategory);
+    });
+
+    if (styleMatches.length > 0) {
+      results.push({ category: cat, hasMatch: true, bestMatch: styleMatches[0], suggestedPiece: null });
+    } else if (partialMatches.length > 0) {
+      results.push({ category: cat, hasMatch: true, bestMatch: partialMatches[0], suggestedPiece: null });
+    } else if (catItems.length > 0) {
+      // Has items in this category but none match the style
+      const keyPiece = stylePreset.keyPieces.find((kp) => kp.category === cat);
+      const suggestedSub = keyPiece?.subcategory || prefs[0] || "Item";
+      const suggestedColor = keyPiece?.colors[0] || "Black";
+      const query = `${suggestedColor} ${suggestedSub} men`;
+      results.push({
+        category: cat,
+        hasMatch: false,
+        bestMatch: catItems[0], // use best available
+        suggestedPiece: {
+          category: cat,
+          subcategory: suggestedSub,
+          color: suggestedColor,
+          reason: `Your closet doesn't have ${suggestedSub.toLowerCase()} in ${stylePreset.label} colors. This would complete the look.`,
+          shopQuery: query,
+          shopUrl: `https://shopee.ph/search?keyword=${encodeURIComponent(query)}&sortBy=sales`,
+        },
+      });
+    } else {
+      // Missing entire category
+      const keyPiece = stylePreset.keyPieces.find((kp) => kp.category === cat);
+      const suggestedSub = keyPiece?.subcategory || prefs[0] || "Item";
+      const suggestedColor = keyPiece?.colors[0] || "Black";
+      const query = `${suggestedColor} ${suggestedSub} men`;
+      results.push({
+        category: cat,
+        hasMatch: false,
+        bestMatch: null,
+        suggestedPiece: {
+          category: cat,
+          subcategory: suggestedSub,
+          color: suggestedColor,
+          reason: `You're missing ${suggestedSub.toLowerCase()} — essential for ${stylePreset.label} style.`,
+          shopQuery: query,
+          shopUrl: `https://shopee.ph/search?keyword=${encodeURIComponent(query)}&sortBy=sales`,
+        },
+      });
+    }
+  }
+
+  return results;
+}
+
 export function generateOutfits(
   items: ClothingItem[],
   options?: {
@@ -123,6 +198,8 @@ export function generateOutfits(
     season?: string;
     count?: number;
     styleId?: string;
+    gender?: string;
+    showSuggested?: boolean;
   }
 ): OutfitResult[] {
   const stylePreset = options?.styleId
@@ -137,7 +214,6 @@ export function generateOutfits(
   const results: OutfitResult[] = [];
   const maxResults = options?.count || 6;
 
-  // Filter by occasion/season if specified
   const filterItems = (arr: ClothingItem[]) => {
     let filtered = arr;
     if (options?.occasion) {
@@ -158,7 +234,6 @@ export function generateOutfits(
     return filtered;
   };
 
-  // Further filter by style-preferred subcategories
   const filterByStyle = (arr: ClothingItem[], category: string) => {
     if (!stylePreset) return arr;
     const prefs = stylePreset.preferredCategories[category];
@@ -174,13 +249,12 @@ export function generateOutfits(
   let filteredShoes = filterByStyle(filterItems(shoes), "shoes");
   let filteredOuterwear = filterByStyle(filterItems(outerwear), "outerwear");
 
-  // Fallback: if style filtering left us with nothing, use all filtered items
   if (filteredTops.length === 0) filteredTops = filterItems(tops);
   if (filteredBottoms.length === 0) filteredBottoms = filterItems(bottoms);
   if (filteredShoes.length === 0) filteredShoes = filterItems(shoes);
   if (filteredOuterwear.length === 0) filteredOuterwear = filterItems(outerwear);
 
-  // Generate all combinations
+  // Generate "from your closet" outfits
   for (const top of filteredTops) {
     for (const bottom of filteredBottoms) {
       const shoeOptions = filteredShoes.length > 0 ? filteredShoes : [null];
@@ -199,17 +273,34 @@ export function generateOutfits(
           stylePreset?.id
         );
 
+        // Determine source label
+        let source: "closet" | "suggested" | "mixed" = "closet";
+        
+        // Analyze gap for suggestions
+        let suggestedPieces: SuggestedPiece[] = [];
+        if (stylePreset) {
+          const gapAnalysis = analyzeStyleGap(outfitItems, stylePreset);
+          suggestedPieces = gapAnalysis
+            .filter((g) => !g.hasMatch && g.suggestedPiece)
+            .map((g) => g.suggestedPiece!);
+          
+          if (suggestedPieces.length > 0) {
+            source = "mixed";
+          }
+        }
+
         results.push({
           items: outfitItems,
           score,
           description: getOutfitDescription(outfitItems),
           style: getOutfitStyleLabel(outfitItems, stylePreset),
+          source,
           stylePreset,
           accessories,
+          suggestedPieces,
           inspoLinks: buildInspoLinks(outfitItems, stylePreset),
         });
 
-        // Also try with outerwear
         if (filteredOuterwear.length > 0) {
           for (const outer of filteredOuterwear) {
             const withOuter = [...outfitItems, outer];
@@ -223,13 +314,26 @@ export function generateOutfits(
               })),
               stylePreset?.id
             );
+            
+            let outerSuggested: SuggestedPiece[] = [];
+            let outerSource: "closet" | "suggested" | "mixed" = "closet";
+            if (stylePreset) {
+              const outerGap = analyzeStyleGap(withOuter, stylePreset);
+              outerSuggested = outerGap
+                .filter((g) => !g.hasMatch && g.suggestedPiece)
+                .map((g) => g.suggestedPiece!);
+              if (outerSuggested.length > 0) outerSource = "mixed";
+            }
+
             results.push({
               items: withOuter,
               score: outerScore,
               description: getOutfitDescription(withOuter),
               style: getOutfitStyleLabel(withOuter, stylePreset),
+              source: outerSource,
               stylePreset,
               accessories: outerAccessories,
+              suggestedPieces: outerSuggested,
               inspoLinks: buildInspoLinks(withOuter, stylePreset),
             });
           }
@@ -238,12 +342,61 @@ export function generateOutfits(
     }
   }
 
-  // Sort by score and return top results
-  results.sort((a, b) => b.score - a.score);
+  // If style preset selected and we have few good matches, generate "suggested" outfits
+  if (stylePreset && (options?.showSuggested !== false)) {
+    const hasGoodClosetFits = results.filter((r) => r.source === "closet" && r.score >= 70).length;
+    
+    // Always generate suggestions for what's missing
+    const gapAnalysis = analyzeStyleGap(items, stylePreset);
+    const missingPieces = gapAnalysis.filter((g) => !g.hasMatch && g.suggestedPiece);
+    
+    if (missingPieces.length > 0 && hasGoodClosetFits < 3) {
+      // Create a "suggested outfit" entry  
+      const suggestedPieces = missingPieces.map((g) => g.suggestedPiece!);
+      const bestClosetItems = results.length > 0 
+        ? results[0].items 
+        : items.slice(0, 2);
+
+      if (bestClosetItems.length > 0) {
+        results.push({
+          items: bestClosetItems,
+          score: 60,
+          description: `${stylePreset.label} suggestion`,
+          style: stylePreset.label,
+          source: "suggested",
+          stylePreset,
+          accessories: suggestAccessories(
+            bestClosetItems.map((i) => ({
+              category: i.category,
+              subcategory: i.subcategory,
+              primaryColor: i.primaryColor,
+              occasion: i.occasion,
+            })),
+            stylePreset.id
+          ),
+          suggestedPieces,
+          inspoLinks: buildInspoLinks(bestClosetItems, stylePreset),
+        });
+      }
+    }
+  }
+
+  // Sort: closet fits first (with high scores), then mixed, then suggested
+  results.sort((a, b) => {
+    const sourceOrder = { closet: 0, mixed: 1, suggested: 2 };
+    const sourceDiff = sourceOrder[a.source] - sourceOrder[b.source];
+    if (sourceDiff !== 0) return sourceDiff;
+    return b.score - a.score;
+  });
+
   return results.slice(0, maxResults);
 }
 
-export function suggestMissingItems(items: ClothingItem[]): {
+export function suggestMissingItems(
+  items: ClothingItem[],
+  styleId?: string,
+  gender?: string
+): {
   category: string;
   subcategory: string;
   colors: string[];
@@ -261,7 +414,31 @@ export function suggestMissingItems(items: ClothingItem[]): {
   const shoes = items.filter((i) => i.category === "shoes");
   const accessories = items.filter((i) => i.category === "accessory");
 
-  // Check if missing basic categories
+  // Style-specific suggestions
+  const stylePreset = styleId ? STYLE_PRESETS.find((s) => s.id === styleId) : undefined;
+
+  if (stylePreset) {
+    // Check what key pieces are missing for this style
+    for (const keyPiece of stylePreset.keyPieces) {
+      const catItems = items.filter((i) => i.category === keyPiece.category);
+      const hasMatch = catItems.some(
+        (i) =>
+          i.subcategory === keyPiece.subcategory &&
+          keyPiece.colors.some((c) => getColorFamily(c) === getColorFamily(i.primaryColor))
+      );
+
+      if (!hasMatch) {
+        suggestions.push({
+          category: keyPiece.category,
+          subcategory: keyPiece.subcategory,
+          colors: keyPiece.colors,
+          reason: `Essential for ${stylePreset.label} style — adds to your outfit options`,
+        });
+      }
+    }
+  }
+
+  // Generic suggestions based on wardrobe gaps
   if (tops.length === 0) {
     suggestions.push({
       category: "top",
@@ -286,8 +463,6 @@ export function suggestMissingItems(items: ClothingItem[]): {
       reason: "Shoes complete every outfit — get a versatile pair",
     });
   }
-
-  // Suggest accessories if missing
   if (accessories.length === 0) {
     suggestions.push({
       category: "accessory",
@@ -295,15 +470,9 @@ export function suggestMissingItems(items: ClothingItem[]): {
       colors: ["Black", "Brown", "Silver"],
       reason: "A watch is the #1 accessory that upgrades any outfit instantly",
     });
-    suggestions.push({
-      category: "accessory",
-      subcategory: "Sunglasses",
-      colors: ["Black", "Brown"],
-      reason: "Essential for the Philippine sun ☀️ and adds instant cool factor",
-    });
   }
 
-  // Suggest colors that would complement existing wardrobe
+  // Color gap analysis
   const existingColors = items.map((i) => getColorFamily(i.primaryColor));
   const hasNeutral = existingColors.some((c) => ["black", "white", "gray"].includes(c));
 
@@ -316,14 +485,13 @@ export function suggestMissingItems(items: ClothingItem[]): {
     });
   }
 
-  // If all tops are one color, suggest complementary
   if (tops.length > 0) {
     const topColors = [...new Set(tops.map((t) => getColorFamily(t.primaryColor)))];
     if (topColors.length === 1) {
       const matching = getMatchingColors(topColors[0]);
       suggestions.push({
         category: "top",
-        subcategory: "Shirt",
+        subcategory: gender === "female" ? "Blouse" : "Shirt",
         colors: matching
           .filter((c) => c !== "any")
           .slice(0, 3)
@@ -333,7 +501,6 @@ export function suggestMissingItems(items: ClothingItem[]): {
     }
   }
 
-  // If all bottoms are one color, suggest variety
   if (bottoms.length > 0 && bottoms.length < 3) {
     const bottomColors = bottoms.map((b) => b.primaryColor);
     const suggestedColors = ["Navy", "Black", "Khaki", "Gray"].filter(
@@ -349,7 +516,6 @@ export function suggestMissingItems(items: ClothingItem[]): {
     }
   }
 
-  // Suggest bag if missing
   if (!accessories.some((a) => a.subcategory?.toLowerCase().includes("bag"))) {
     suggestions.push({
       category: "accessory",
@@ -359,5 +525,14 @@ export function suggestMissingItems(items: ClothingItem[]): {
     });
   }
 
-  return suggestions.slice(0, 8);
+  // Deduplicate by subcategory
+  const seen = new Set<string>();
+  return suggestions
+    .filter((s) => {
+      const key = `${s.category}-${s.subcategory}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
 }

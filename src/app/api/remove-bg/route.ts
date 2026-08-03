@@ -5,11 +5,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.REMOVE_BG_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        {
-          error: "REMOVE_BG_API_KEY not configured",
-          setupRequired: true,
-          fallbackUrl: "https://www.remove.bg/upload",
-        },
+        { error: "REMOVE_BG_API_KEY not configured", setupRequired: true, fallbackUrl: "https://www.remove.bg/upload" },
         { status: 503 }
       );
     }
@@ -34,20 +30,14 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch("https://api.remove.bg/v1.0/removebg", {
       method: "POST",
-      headers: {
-        "X-Api-Key": apiKey,
-      },
+      headers: { "X-Api-Key": apiKey },
       body: form,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json(
-        {
-          error: "Background removal failed",
-          details: errorText,
-          fallbackUrl: "https://www.remove.bg/upload",
-        },
+        { error: "Background removal failed", details: errorText, fallbackUrl: "https://www.remove.bg/upload" },
         { status: response.status }
       );
     }
@@ -60,10 +50,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("remove-bg error:", error);
     return NextResponse.json(
-      {
-        error: "Background removal failed",
-        fallbackUrl: "https://www.remove.bg/upload",
-      },
+      { error: "Background removal failed", fallbackUrl: "https://www.remove.bg/upload" },
       { status: 500 }
     );
   }

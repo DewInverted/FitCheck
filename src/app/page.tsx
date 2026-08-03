@@ -15,17 +15,22 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("wardrobe");
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [prefs, setPrefs] = useState<{ gender: string; defaultStyle: string } | null>(null);
+  const [prefs, setPrefs] = useState<{ gender: string; defaultStyle: string; showSuggested: boolean } | null>(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     fetch("/api/preferences")
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data) setPrefs({ gender: data.gender, defaultStyle: data.defaultStyle }); })
+      .then((data) => {
+        if (data) setPrefs({
+          gender: data.gender,
+          defaultStyle: data.defaultStyle,
+          showSuggested: data.showSuggested !== false,
+        });
+      })
       .finally(() => setPrefsLoaded(true));
 
-    // Load theme
     const saved = localStorage.getItem("fitcheck-dark");
     if (saved === "true") setDarkMode(true);
   }, []);
@@ -52,12 +57,12 @@ export default function Home() {
   }
 
   if (!prefs) {
-    return <Onboarding onComplete={(gender, style) => setPrefs({ gender, defaultStyle: style })} />;
+    return <Onboarding onComplete={(gender, style) => setPrefs({ gender, defaultStyle: style, showSuggested: true })} />;
   }
 
   return (
     <div className={`min-h-screen flex flex-col ${darkMode ? "bg-zinc-950" : "gradient-mesh"}`}>
-      {/* Header — safe area aware */}
+      {/* Header */}
       <header className={`${darkMode ? "bg-zinc-900/90" : "glass"} border-b ${darkMode ? "border-zinc-800" : "border-zinc-100/80"} sticky top-0 z-40 pt-[env(safe-area-inset-top)]`}>
         <div className="max-w-lg mx-auto px-5 h-12 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -68,7 +73,6 @@ export default function Home() {
             </div>
             <span className={`text-[15px] font-bold tracking-tight ${darkMode ? "text-white" : "text-zinc-900"}`}>fitcheck</span>
           </div>
-          {/* Theme toggle */}
           <button onClick={() => setDarkMode(!darkMode)}
             className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-all ${darkMode ? "bg-zinc-800 text-yellow-400" : "bg-zinc-100 text-zinc-500"}`}>
             {darkMode ? (
@@ -82,8 +86,16 @@ export default function Home() {
 
       {/* Content */}
       <main className="flex-1 max-w-lg mx-auto w-full px-5 pt-5 pb-28">
-        {activeTab === "wardrobe" && <Wardrobe key={refreshKey} onAddClick={() => setShowAddModal(true)} darkMode={darkMode} />}
-        {activeTab === "outfits" && <OutfitGenerator key={refreshKey} defaultStyle={prefs.defaultStyle} gender={prefs.gender} />}
+        {activeTab === "wardrobe" && <Wardrobe key={refreshKey} onAddClick={() => setShowAddModal(true)} darkMode={darkMode} gender={prefs.gender} />}
+        {activeTab === "outfits" && (
+          <OutfitGenerator
+            key={refreshKey}
+            defaultStyle={prefs.defaultStyle}
+            gender={prefs.gender}
+            showSuggested={prefs.showSuggested}
+            onToggleSuggested={(val) => setPrefs(p => p ? { ...p, showSuggested: val } : p)}
+          />
+        )}
         {activeTab === "suggestions" && <Suggestions key={refreshKey} gender={prefs.gender} defaultStyle={prefs.defaultStyle} />}
         {activeTab === "stores" && <NearbyStores />}
       </main>
@@ -118,8 +130,11 @@ export default function Home() {
       </nav>
 
       {showAddModal && (
-        <AddClothingModal onClose={() => setShowAddModal(false)}
-          onSaved={() => { setShowAddModal(false); setRefreshKey((k) => k + 1); }} />
+        <AddClothingModal
+          onClose={() => setShowAddModal(false)}
+          onSaved={() => { setShowAddModal(false); setRefreshKey((k) => k + 1); }}
+          gender={prefs.gender}
+        />
       )}
 
       <InstallPrompt />

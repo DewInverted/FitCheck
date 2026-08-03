@@ -26,11 +26,9 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
   const stylePref = STYLE_PRESETS.find((s) => s.id === defaultStyle);
 
   useEffect(() => {
-    // Fetch suggestions then fetch products for each
     fetch(`/api/suggestions?gender=${gender || ""}&style=${defaultStyle || ""}`)
       .then((r) => r.ok ? r.json() : [])
       .then(async (data: Suggestion[]) => {
-        // Fetch products for each suggestion
         const withProducts = await Promise.all(
           data.map(async (s) => {
             try {
@@ -70,7 +68,6 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
 
   return (
     <div className="space-y-4 animate-fade-up">
-      {/* Header */}
       <div className="flex items-end justify-between">
         <div>
           <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">What to buy next</p>
@@ -92,10 +89,8 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
         </div>
       </div>
 
-      {/* ═══ CARDS VIEW ═══ */}
       {viewMode === "cards" && suggestions.map((s, i) => (
         <div key={i} className="rounded-2xl border border-zinc-100 overflow-hidden animate-pop-in bg-white" style={{ animationDelay: `${i * 50}ms` }}>
-          {/* Product images scroll */}
           {s.products && s.products.length > 0 && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar p-3 pb-2">
               {s.products.map((p) => (
@@ -118,21 +113,16 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
               ))}
             </div>
           )}
-
           <div className="px-4 pb-3 pt-1">
             <p className="text-[14px] font-semibold text-zinc-900 mb-1">{s.colors[0]} {s.subcategory}</p>
             <p className="text-[12px] text-zinc-500 leading-relaxed mb-2">{s.reason}</p>
-
             {s.pairingTip && (
               <div className="bg-zinc-50 rounded-xl p-2.5 mb-2">
                 <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">How to wear it</p>
                 <p className="text-[11px] text-zinc-600 leading-relaxed">{s.pairingTip}</p>
               </div>
             )}
-
             {s.styleContext && <p className="text-[10px] text-zinc-400 italic mb-2">{s.styleContext}</p>}
-
-            {/* Quick shop pills */}
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
               {s.shoppingLinks.slice(0, 4).map((l) => (
                 <a key={l.store} href={l.url} target="_blank" rel="noopener noreferrer"
@@ -145,7 +135,6 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
         </div>
       ))}
 
-      {/* ═══ GRID VIEW ═══ */}
       {viewMode === "grid" && (
         <div className="grid grid-cols-2 gap-2">
           {suggestions.map((s, i) => {
@@ -161,18 +150,11 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-4xl">{catEmoji[s.category]}</div>
                   )}
-                  {img && <span className="absolute top-1.5 left-1.5 text-[8px] font-bold bg-white/90 backdrop-blur-sm text-zinc-700 px-1.5 py-0.5 rounded-full">{img.badge}</span>}
                 </div>
                 <div className="p-2.5">
                   <p className="text-[12px] font-semibold text-zinc-800 truncate">{s.colors[0]} {s.subcategory}</p>
                   {img && <p className="text-[12px] font-bold text-orange-500 mt-0.5">{img.priceRange}</p>}
                   <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-1">{s.reason}</p>
-                  {img && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-[9px] text-yellow-500">★ {img.rating}</span>
-                      <span className="text-[9px] text-zinc-300 ml-auto">{img.soldCount}</span>
-                    </div>
-                  )}
                 </div>
               </a>
             );
@@ -180,7 +162,6 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
         </div>
       )}
 
-      {/* ═══ LIST VIEW ═══ */}
       {viewMode === "list" && (
         <div className="space-y-1">
           {suggestions.map((s, i) => {
@@ -202,12 +183,6 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
                   {img && <p className="text-[12px] font-bold text-orange-500">{img.priceRange}</p>}
                   <p className="text-[10px] text-zinc-400 truncate">{s.reason}</p>
                 </div>
-                {img && (
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-[9px] text-yellow-500">★ {img.rating}</p>
-                    <p className="text-[8px] text-zinc-300">{img.soldCount}</p>
-                  </div>
-                )}
                 <svg viewBox="0 0 24 24" className="w-4 h-4 text-zinc-300 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>

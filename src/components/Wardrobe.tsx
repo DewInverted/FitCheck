@@ -2,16 +2,16 @@
 
 import { useState, useEffect } from "react";
 import type { ClothingItem } from "@/db/schema";
-import { PREDEFINED_COLORS, CATEGORIES, SUBCATEGORIES, FIT_TYPES } from "@/lib/colors";
+import { PREDEFINED_COLORS, CATEGORIES, SUBCATEGORIES, SUBCATEGORIES_FEMALE, FIT_TYPES } from "@/lib/colors";
 
-interface Props { onAddClick: () => void; darkMode?: boolean; }
+interface Props { onAddClick: () => void; darkMode?: boolean; gender?: string; }
 
 const CAT_LABELS: Record<string, string> = {
   all: "All", top: "Tops", bottom: "Bottoms",
   shoes: "Shoes", outerwear: "Layers", accessory: "Accessories",
 };
 
-export default function Wardrobe({ onAddClick, darkMode }: Props) {
+export default function Wardrobe({ onAddClick, darkMode, gender }: Props) {
   const [items, setItems] = useState<ClothingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -25,11 +25,12 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
   const [editColor, setEditColor] = useState("");
   const [editFit, setEditFit] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
-  // Select mode
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkConfirm, setBulkConfirm] = useState(false);
+
+  const subs = gender === "female" ? SUBCATEGORIES_FEMALE : SUBCATEGORIES;
 
   useEffect(() => { fetchItems(); }, []);
 
@@ -68,8 +69,12 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
 
   const startEdit = () => {
     if (!selected) return;
-    setEditName(selected.name); setEditCategory(selected.category); setEditSubcategory(selected.subcategory || "");
-    setEditColor(selected.primaryColor); setEditFit((selected as Record<string, unknown>).fit as string || ""); setEditing(true);
+    setEditName(selected.name);
+    setEditCategory(selected.category);
+    setEditSubcategory(selected.subcategory || "");
+    setEditColor(selected.primaryColor);
+    setEditFit(selected.fit || "");
+    setEditing(true);
   };
 
   const saveEdit = async () => {
@@ -103,7 +108,6 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
 
   return (
     <div className="animate-fade-up">
-      {/* Top bar: filters + select mode toggle */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar flex-1 mr-2">
           {cats.map(c => {
@@ -124,7 +128,6 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
         </button>
       </div>
 
-      {/* Bulk delete bar */}
       {selectMode && selectedIds.size > 0 && (
         <div className="mb-3 animate-fade-up">
           {!bulkConfirm ? (
@@ -144,7 +147,6 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
         </div>
       )}
 
-      {/* Grid */}
       <div className="grid grid-cols-3 gap-1.5">
         {filtered.map((item, i) => (
           <button key={item.id}
@@ -157,7 +159,6 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
             }`}
             style={{ animationDelay: `${i * 30}ms` }}>
             <img src={item.imageData} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-            {/* Select checkbox */}
             {selectMode && (
               <div className={`absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
                 selectedIds.has(item.id) ? "bg-red-500 text-white" : "bg-black/30 backdrop-blur text-white/70"
@@ -175,116 +176,139 @@ export default function Wardrobe({ onAddClick, darkMode }: Props) {
         ))}
       </div>
 
-      {/* Detail Sheet */}
+      {/* Detail / Edit Sheet — FIXED: proper positioning for iPhone */}
       {selected && !selectMode && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl animate-slide-up" style={{ maxHeight: editing ? "85vh" : "55vh" }}>
+          <div className={`absolute bottom-0 left-0 right-0 ${d ? "bg-zinc-900" : "bg-white"} rounded-t-3xl animate-slide-up flex flex-col`}
+            style={{ maxHeight: "90vh", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
             {/* Handle + close/back */}
-            <div className="sticky top-0 bg-white z-10 rounded-t-3xl border-b border-zinc-100">
-              <div className="w-10 h-1 rounded-full bg-zinc-300 mx-auto mt-2.5" />
-              <div className="flex items-center justify-between px-4 py-2">
-                <button onClick={editing ? () => setEditing(false) : closeSheet} className="text-[14px] text-zinc-500 font-medium min-w-[50px]">{editing ? "← Back" : "Close"}</button>
-                <span className="text-[13px] font-semibold text-zinc-900">{editing ? "Edit Item" : "Details"}</span>
+            <div className={`sticky top-0 ${d ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-100"} z-10 rounded-t-3xl border-b flex-shrink-0`}>
+              <div className={`w-10 h-1 rounded-full ${d ? "bg-zinc-700" : "bg-zinc-300"} mx-auto mt-2.5`} />
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <button onClick={editing ? () => setEditing(false) : closeSheet}
+                  className={`text-[14px] ${d ? "text-zinc-400" : "text-zinc-500"} font-medium min-w-[50px] min-h-[44px] flex items-center`}>
+                  {editing ? "← Back" : "Close"}
+                </button>
+                <span className={`text-[13px] font-semibold ${d ? "text-white" : "text-zinc-900"}`}>{editing ? "Edit Item" : "Details"}</span>
                 {editing ? (
-                  <button onClick={saveEdit} disabled={savingEdit} className="text-[14px] text-blue-500 font-semibold min-w-[50px] text-right disabled:opacity-50">
+                  <button onClick={saveEdit} disabled={savingEdit}
+                    className="text-[14px] text-blue-500 font-semibold min-w-[50px] min-h-[44px] flex items-center justify-end disabled:opacity-50">
                     {savingEdit ? "..." : "Save"}
                   </button>
                 ) : <div className="min-w-[50px]" />}
               </div>
             </div>
-            <div className="overflow-y-auto" style={{ maxHeight: editing ? "calc(85vh - 55px)" : "calc(55vh - 55px)" }}>
 
-            {!editing ? (
-              <>
-                {/* Image + info side by side */}
-                <div className="px-4 pb-2 flex gap-3">
-                  <div className="w-24 h-24 flex-shrink-0 bg-zinc-50 overflow-hidden rounded-xl">
-                    <img src={selected.imageData} alt={selected.name} className="w-full h-full object-cover" />
+            <div className="overflow-y-auto flex-1 overscroll-contain">
+              {!editing ? (
+                <>
+                  <div className="px-4 py-3 flex gap-3">
+                    <div className={`w-24 h-24 flex-shrink-0 ${d ? "bg-zinc-800" : "bg-zinc-50"} overflow-hidden rounded-xl`}>
+                      <img src={selected.imageData} alt={selected.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0 py-0.5">
+                      <p className={`text-[16px] font-semibold ${d ? "text-white" : "text-zinc-900"} truncate`}>{selected.name}</p>
+                      <p className={`text-[12px] ${d ? "text-zinc-500" : "text-zinc-400"} mt-0.5`}>{selected.subcategory || selected.category}{selected.brand && ` · ${selected.brand}`}</p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {[selected.primaryColor, selected.fit, selected.pattern]
+                          .filter(Boolean).map(tag => (
+                            <span key={tag} className={`h-5 px-2 rounded-full ${d ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-500"} text-[10px] font-medium flex items-center`}>{tag}</span>
+                          ))}
+                      </div>
+                    </div>
+                    <button onClick={() => toggleFav(selected)}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90 ${selected.isFavorite ? "bg-red-50 text-red-500" : (d ? "bg-zinc-800 text-zinc-500" : "bg-zinc-100 text-zinc-400")}`}>
+                      {selected.isFavorite ? "♥" : "♡"}
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0 py-0.5">
-                    <p className="text-[16px] font-semibold text-zinc-900 truncate">{selected.name}</p>
-                    <p className="text-[12px] text-zinc-400 mt-0.5">{selected.subcategory || selected.category}{selected.brand && ` · ${selected.brand}`}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {[selected.primaryColor, (selected as Record<string, unknown>).fit as string | undefined, selected.pattern]
-                        .filter(Boolean).map(tag => (
-                          <span key={tag} className="h-5 px-2 rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-medium flex items-center">{tag}</span>
-                        ))}
+                  <div className="px-4 pb-6 space-y-2">
+                    <button onClick={startEdit} className={`w-full h-11 rounded-xl text-[13px] font-medium ${d ? "text-zinc-300 bg-zinc-800 hover:bg-zinc-700" : "text-zinc-700 bg-zinc-100 hover:bg-zinc-200"} active:scale-[0.98] transition-all`}>Edit details</button>
+                    {!confirmDelete ? (
+                      <button onClick={() => setConfirmDelete(true)} className="w-full h-11 rounded-xl text-[13px] font-medium text-red-500 bg-red-50 hover:bg-red-100 active:scale-[0.98] transition-all">Remove item</button>
+                    ) : (
+                      <div className="space-y-2 animate-fade-up">
+                        <p className={`text-[12px] ${d ? "text-zinc-500" : "text-zinc-500"} text-center`}>Are you sure? This can&apos;t be undone.</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => setConfirmDelete(false)} className={`flex-1 h-11 rounded-xl text-[13px] font-medium ${d ? "text-zinc-400 bg-zinc-800" : "text-zinc-600 bg-zinc-100"} active:scale-[0.98] transition-all`}>Cancel</button>
+                          <button onClick={() => remove(selected.id)} disabled={deleting}
+                            className="flex-1 h-11 rounded-xl text-[13px] font-semibold text-white bg-red-500 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+                            {deleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Removing</> : "Yes, remove"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                /* EDIT MODE — Fixed: proper spacing and touch targets for iPhone */
+                <div className="px-5 pt-4 pb-8 space-y-5 animate-fade-up">
+                  <div>
+                    <label className={`text-[12px] font-medium ${d ? "text-zinc-500" : "text-zinc-500"} mb-2 block`}>Name</label>
+                    <input value={editName} onChange={e => setEditName(e.target.value)}
+                      className={`w-full h-12 px-4 rounded-xl border ${d ? "border-zinc-700 bg-zinc-800 text-white" : "border-zinc-200 bg-white text-zinc-900"} text-[14px] focus:outline-none focus:border-zinc-400`} />
+                  </div>
+                  <div>
+                    <label className={`text-[12px] font-medium ${d ? "text-zinc-500" : "text-zinc-500"} mb-2 block`}>Category</label>
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORIES.map(c => (
+                        <button key={c.value} onClick={() => { setEditCategory(c.value); setEditSubcategory(""); }}
+                          className={`h-10 px-4 rounded-full text-[12px] font-medium active:scale-95 transition-all ${
+                            editCategory === c.value
+                              ? (d ? "bg-white text-zinc-900" : "bg-zinc-900 text-white")
+                              : (d ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600")
+                          }`}>{c.label}</button>
+                      ))}
                     </div>
                   </div>
-                  <button onClick={() => toggleFav(selected)}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 transition-all active:scale-90 ${selected.isFavorite ? "bg-red-50 text-red-500" : "bg-zinc-100 text-zinc-400"}`}>
-                    {selected.isFavorite ? "♥" : "♡"}
-                  </button>
-                </div>
-                <div className="px-4 pb-4 space-y-2">
-                  <button onClick={startEdit} className="w-full h-10 rounded-xl text-[13px] font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 active:scale-[0.98] transition-all">Edit details</button>
-                  {!confirmDelete ? (
-                    <button onClick={() => setConfirmDelete(true)} className="w-full h-11 rounded-xl text-[13px] font-medium text-red-500 bg-red-50 hover:bg-red-100 active:scale-[0.98] transition-all">Remove item</button>
-                  ) : (
-                    <div className="space-y-2 animate-fade-up">
-                      <p className="text-[12px] text-zinc-500 text-center">Are you sure? This can&apos;t be undone.</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => setConfirmDelete(false)} className="flex-1 h-11 rounded-xl text-[13px] font-medium text-zinc-600 bg-zinc-100 active:scale-[0.98] transition-all">Cancel</button>
-                        <button onClick={() => remove(selected.id)} disabled={deleting}
-                          className="flex-1 h-11 rounded-xl text-[13px] font-semibold text-white bg-red-500 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
-                          {deleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Removing</> : "Yes, remove"}
-                        </button>
+                  {editCategory && subs[editCategory] && (
+                    <div>
+                      <label className={`text-[12px] font-medium ${d ? "text-zinc-500" : "text-zinc-500"} mb-2 block`}>Type</label>
+                      <div className="flex flex-wrap gap-2">
+                        {subs[editCategory].map(s => (
+                          <button key={s} onClick={() => setEditSubcategory(s)}
+                            className={`h-10 px-4 rounded-full text-[12px] font-medium active:scale-95 transition-all ${
+                              editSubcategory === s
+                                ? (d ? "bg-zinc-200 text-zinc-900" : "bg-zinc-800 text-white")
+                                : (d ? "bg-zinc-800 text-zinc-500" : "bg-zinc-100 text-zinc-500")
+                            }`}>{s}</button>
+                        ))}
                       </div>
                     </div>
                   )}
-                </div>
-              </>
-            ) : (
-              <div className="px-5 pb-5 space-y-4 animate-fade-up">
-                <div>
-                  <label className="text-[12px] font-medium text-zinc-500 mb-1.5 block">Name</label>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full h-11 px-3.5 rounded-xl border border-zinc-200 text-[14px] focus:outline-none focus:border-zinc-400" />
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-zinc-500 mb-1.5 block">Category</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {CATEGORIES.map(c => (
-                      <button key={c.value} onClick={() => { setEditCategory(c.value); setEditSubcategory(""); }}
-                        className={`h-8 px-3 rounded-full text-[11px] font-medium active:scale-95 transition-all ${editCategory === c.value ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600"}`}>{c.label}</button>
-                    ))}
-                  </div>
-                </div>
-                {editCategory && SUBCATEGORIES[editCategory] && (
                   <div>
-                    <label className="text-[12px] font-medium text-zinc-500 mb-1.5 block">Type</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SUBCATEGORIES[editCategory].map(s => (
-                        <button key={s} onClick={() => setEditSubcategory(s)}
-                          className={`h-8 px-3 rounded-full text-[11px] font-medium active:scale-95 transition-all ${editSubcategory === s ? "bg-zinc-800 text-white" : "bg-zinc-100 text-zinc-500"}`}>{s}</button>
+                    <label className={`text-[12px] font-medium ${d ? "text-zinc-500" : "text-zinc-500"} mb-2 block`}>Color</label>
+                    <div className="flex flex-wrap gap-2">
+                      {PREDEFINED_COLORS.slice(0, 20).map(c => (
+                        <button key={c} onClick={() => setEditColor(c)}
+                          className={`h-10 px-4 rounded-full text-[12px] font-medium active:scale-95 transition-all ${
+                            editColor === c
+                              ? (d ? "bg-white text-zinc-900" : "bg-zinc-900 text-white")
+                              : (d ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600")
+                          }`}>{c}</button>
                       ))}
                     </div>
                   </div>
-                )}
-                <div>
-                  <label className="text-[12px] font-medium text-zinc-500 mb-1.5 block">Color</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PREDEFINED_COLORS.map(c => (
-                      <button key={c} onClick={() => setEditColor(c)}
-                        className={`h-8 px-3 rounded-full text-[11px] font-medium active:scale-95 transition-all ${editColor === c ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600"}`}>{c}</button>
-                    ))}
-                  </div>
-                </div>
-                {FIT_TYPES[editCategory] && (
-                  <div>
-                    <label className="text-[12px] font-medium text-zinc-500 mb-1.5 block">Fit</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {FIT_TYPES[editCategory].map(f => (
-                        <button key={f} onClick={() => setEditFit(editFit === f ? "" : f)}
-                          className={`h-8 px-3 rounded-full text-[11px] font-medium active:scale-95 transition-all ${editFit === f ? "bg-zinc-800 text-white" : "bg-zinc-100 text-zinc-500"}`}>{f}</button>
-                      ))}
+                  {FIT_TYPES[editCategory] && (
+                    <div>
+                      <label className={`text-[12px] font-medium ${d ? "text-zinc-500" : "text-zinc-500"} mb-2 block`}>Fit</label>
+                      <div className="flex flex-wrap gap-2">
+                        {FIT_TYPES[editCategory].map(f => (
+                          <button key={f} onClick={() => setEditFit(editFit === f ? "" : f)}
+                            className={`h-10 px-4 rounded-full text-[12px] font-medium active:scale-95 transition-all ${
+                              editFit === f
+                                ? (d ? "bg-zinc-200 text-zinc-900" : "bg-zinc-800 text-white")
+                                : (d ? "bg-zinc-800 text-zinc-500" : "bg-zinc-100 text-zinc-500")
+                            }`}>{f}</button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-                <div className="h-4" />{/* bottom spacing */}
-              </div>
-            )}
-            </div>{/* end scroll wrapper */}
+                  )}
+                  {/* Extra bottom padding for iPhone safe area */}
+                  <div className="h-6" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -9,15 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@types/uuid": "^10.0.0",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
     "next": "16.2.6",
-    "openai": "^7.2.0",
     "pg": "8.20.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "uuid": "^14.0.1"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",

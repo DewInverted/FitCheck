@@ -4,7 +4,7 @@
   "description": "Build your digital wardrobe. Get styled outfits. Shop what's missing.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#09090b",
   "theme_color": "#18181b",
   "orientation": "portrait",
   "icons": [
