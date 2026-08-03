@@ -16,12 +16,19 @@ interface Suggestion {
   products?: Product[];
 }
 
-type ViewMode = "cards" | "list" | "grid";
+const CAT_ORDER = ["top", "bottom", "shoes", "outerwear", "accessory"];
+const CAT_LABELS: Record<string, { label: string; emoji: string }> = {
+  top: { label: "Tops", emoji: "👕" },
+  bottom: { label: "Bottoms", emoji: "👖" },
+  shoes: { label: "Shoes", emoji: "👟" },
+  outerwear: { label: "Outerwear", emoji: "🧥" },
+  accessory: { label: "Accessories", emoji: "⌚" },
+};
 
 export default function Suggestions({ gender, defaultStyle }: { gender?: string; defaultStyle?: string }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
 
   const stylePref = STYLE_PRESETS.find((s) => s.id === defaultStyle);
 
@@ -49,7 +56,10 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
   if (loading) {
     return (
       <div className="space-y-4 animate-fade-in">
-        {[1, 2, 3].map((i) => <div key={i} className="rounded-2xl h-56 skeleton" />)}
+        <div className="flex gap-2 mb-4">
+          {[1,2,3,4].map(i => <div key={i} className="h-8 w-20 rounded-full skeleton" />)}
+        </div>
+        {[1, 2, 3].map((i) => <div key={i} className="rounded-2xl h-40 skeleton" />)}
       </div>
     );
   }
@@ -66,135 +76,188 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
     );
   }
 
+  // Group suggestions by category
+  const byCategory: Record<string, Suggestion[]> = {};
+  suggestions.forEach(s => {
+    if (!byCategory[s.category]) byCategory[s.category] = [];
+    byCategory[s.category].push(s);
+  });
+
+  const categories = CAT_ORDER.filter(c => byCategory[c]?.length > 0);
+  const filtered = activeCategory === "all" ? suggestions : (byCategory[activeCategory] || []);
+
   return (
-    <div className="space-y-4 animate-fade-up">
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">What to buy next</p>
-          <p className="text-[13px] text-zinc-500">
-            {suggestions.length} pieces
-            {stylePref && <> · <strong className="text-zinc-600">{stylePref.label}</strong></>}
-          </p>
-        </div>
-        <div className="flex bg-zinc-100 rounded-lg p-0.5">
-          <button onClick={() => setViewMode("cards")} className={`p-1.5 rounded-md transition-all ${viewMode === "cards" ? "bg-white shadow-sm" : ""}`}>
-            <svg viewBox="0 0 24 24" className={`w-3.5 h-3.5 ${viewMode === "cards" ? "text-zinc-900" : "text-zinc-400"}`} fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="12" x2="21" y2="12" /></svg>
-          </button>
-          <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-md transition-all ${viewMode === "grid" ? "bg-white shadow-sm" : ""}`}>
-            <svg viewBox="0 0 24 24" className={`w-3.5 h-3.5 ${viewMode === "grid" ? "text-zinc-900" : "text-zinc-400"}`} fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
-          </button>
-          <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-md transition-all ${viewMode === "list" ? "bg-white shadow-sm" : ""}`}>
-            <svg viewBox="0 0 24 24" className={`w-3.5 h-3.5 ${viewMode === "list" ? "text-zinc-900" : "text-zinc-400"}`} fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><circle cx="4" cy="6" r="1" fill="currentColor" /><circle cx="4" cy="12" r="1" fill="currentColor" /><circle cx="4" cy="18" r="1" fill="currentColor" /></svg>
-          </button>
-        </div>
+    <div className="animate-fade-up">
+      {/* Header */}
+      <div className="mb-4">
+        <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">What to buy next</p>
+        <p className="text-[14px] text-zinc-600">
+          Based on your closet
+          {stylePref && <> · <span className="font-semibold">{stylePref.emoji} {stylePref.label}</span></>}
+        </p>
       </div>
 
-      {viewMode === "cards" && suggestions.map((s, i) => (
-        <div key={i} className="rounded-2xl border border-zinc-100 overflow-hidden animate-pop-in bg-white" style={{ animationDelay: `${i * 50}ms` }}>
-          {s.products && s.products.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar p-3 pb-2">
-              {s.products.map((p) => (
-                <a key={p.id} href={p.shopUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex-shrink-0 w-[140px] rounded-xl overflow-hidden border border-zinc-100 bg-white hover:shadow-md active:scale-[0.97] transition-all">
-                  <div className="aspect-square bg-zinc-50 overflow-hidden relative">
-                    <img src={p.image} alt={p.alt} className="w-full h-full object-cover" loading="lazy" />
-                    <span className="absolute top-1.5 left-1.5 text-[8px] font-bold bg-white/90 backdrop-blur-sm text-zinc-700 px-1.5 py-0.5 rounded-full">{p.badge}</span>
-                  </div>
-                  <div className="p-2">
-                    <p className="text-[11px] font-semibold text-zinc-800 truncate">{p.title}</p>
-                    <p className="text-[12px] font-bold text-orange-500 mt-0.5">{p.priceRange}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[9px] text-yellow-500">★</span>
-                      <span className="text-[9px] text-zinc-500">{p.rating}</span>
-                      <span className="text-[9px] text-zinc-300 ml-auto">{p.soldCount}</span>
-                    </div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-          <div className="px-4 pb-3 pt-1">
-            <p className="text-[14px] font-semibold text-zinc-900 mb-1">{s.colors[0]} {s.subcategory}</p>
-            <p className="text-[12px] text-zinc-500 leading-relaxed mb-2">{s.reason}</p>
-            {s.pairingTip && (
-              <div className="bg-zinc-50 rounded-xl p-2.5 mb-2">
-                <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">How to wear it</p>
-                <p className="text-[11px] text-zinc-600 leading-relaxed">{s.pairingTip}</p>
+      {/* Category Tabs */}
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 mb-5">
+        <button onClick={() => setActiveCategory("all")}
+          className={`flex-shrink-0 h-9 px-4 rounded-full text-[12px] font-medium transition-all ${
+            activeCategory === "all" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+          }`}>
+          All ({suggestions.length})
+        </button>
+        {categories.map(cat => (
+          <button key={cat} onClick={() => setActiveCategory(cat)}
+            className={`flex-shrink-0 h-9 px-4 rounded-full text-[12px] font-medium transition-all flex items-center gap-1.5 ${
+              activeCategory === cat ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            }`}>
+            <span>{CAT_LABELS[cat]?.emoji}</span>
+            {CAT_LABELS[cat]?.label} ({byCategory[cat]?.length || 0})
+          </button>
+        ))}
+      </div>
+
+      {/* Suggestions Grid */}
+      <div className="space-y-6">
+        {activeCategory === "all" ? (
+          // Grouped view
+          categories.map(cat => (
+            <div key={cat} className="animate-fade-up">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">{CAT_LABELS[cat]?.emoji}</span>
+                <h3 className="text-[14px] font-semibold text-zinc-800">{CAT_LABELS[cat]?.label}</h3>
+                <span className="text-[11px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">{byCategory[cat]?.length}</span>
               </div>
-            )}
-            {s.styleContext && <p className="text-[10px] text-zinc-400 italic mb-2">{s.styleContext}</p>}
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
-              {s.shoppingLinks.slice(0, 4).map((l) => (
-                <a key={l.store} href={l.url} target="_blank" rel="noopener noreferrer"
-                  className="flex-shrink-0 flex items-center gap-1 h-7 px-2.5 rounded-full bg-zinc-50 hover:bg-zinc-100 active:scale-95 transition-all text-[10px] font-medium text-zinc-600">
-                  <span className="text-sm">{l.icon}</span> {l.store}
-                </a>
-              ))}
+              <div className="grid grid-cols-2 gap-3">
+                {byCategory[cat]?.map((s, i) => (
+                  <SuggestionCard key={i} suggestion={s} compact />
+                ))}
+              </div>
             </div>
+          ))
+        ) : (
+          // Single category view - larger cards
+          <div className="space-y-3">
+            {filtered.map((s, i) => (
+              <SuggestionCard key={i} suggestion={s} />
+            ))}
           </div>
-        </div>
-      ))}
-
-      {viewMode === "grid" && (
-        <div className="grid grid-cols-2 gap-2">
-          {suggestions.map((s, i) => {
-            const img = s.products?.[0];
-            return (
-              <a key={i} href={img?.shopUrl || `https://shopee.ph/search?keyword=${encodeURIComponent(`${s.colors[0]} ${s.subcategory}`)}`}
-                target="_blank" rel="noopener noreferrer"
-                className="rounded-2xl border border-zinc-100 overflow-hidden bg-white animate-pop-in active:scale-[0.97] transition-all"
-                style={{ animationDelay: `${i * 40}ms` }}>
-                <div className="aspect-square bg-zinc-50 overflow-hidden relative">
-                  {img ? (
-                    <img src={img.image} alt={img.alt} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl">{catEmoji[s.category]}</div>
-                  )}
-                </div>
-                <div className="p-2.5">
-                  <p className="text-[12px] font-semibold text-zinc-800 truncate">{s.colors[0]} {s.subcategory}</p>
-                  {img && <p className="text-[12px] font-bold text-orange-500 mt-0.5">{img.priceRange}</p>}
-                  <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-1">{s.reason}</p>
-                </div>
-              </a>
-            );
-          })}
-        </div>
-      )}
-
-      {viewMode === "list" && (
-        <div className="space-y-1">
-          {suggestions.map((s, i) => {
-            const img = s.products?.[0];
-            return (
-              <a key={i} href={img?.shopUrl || `https://shopee.ph/search?keyword=${encodeURIComponent(`${s.colors[0]} ${s.subcategory}`)}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-50 active:bg-zinc-100 transition-colors animate-fade-up"
-                style={{ animationDelay: `${i * 30}ms` }}>
-                <div className="w-14 h-14 rounded-xl overflow-hidden bg-zinc-100 flex-shrink-0">
-                  {img ? (
-                    <img src={img.image} alt={img.alt} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl">{catEmoji[s.category]}</div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-zinc-800">{s.colors[0]} {s.subcategory}</p>
-                  {img && <p className="text-[12px] font-bold text-orange-500">{img.priceRange}</p>}
-                  <p className="text-[10px] text-zinc-400 truncate">{s.reason}</p>
-                </div>
-                <svg viewBox="0 0 24 24" className="w-4 h-4 text-zinc-300 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </a>
-            );
-          })}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
-const catEmoji: Record<string, string> = {
+function SuggestionCard({ suggestion: s, compact = false }: { suggestion: Suggestion; compact?: boolean }) {
+  const img = s.products?.[0];
+  const [showStores, setShowStores] = useState(false);
+
+  if (compact) {
+    // Compact grid card
+    return (
+      <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden animate-pop-in">
+        <a href={img?.shopUrl || `https://shopee.ph/search?keyword=${encodeURIComponent(`${s.colors[0]} ${s.subcategory}`)}`}
+          target="_blank" rel="noopener noreferrer"
+          className="block">
+          <div className="aspect-square bg-zinc-50 overflow-hidden relative">
+            {img ? (
+              <img src={img.image} alt={img.alt} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-4xl text-zinc-200">
+                {CAT_LABELS[s.category]?.emoji || "👕"}
+              </div>
+            )}
+            {img?.badge && (
+              <span className="absolute top-2 left-2 text-[9px] font-bold bg-white/90 backdrop-blur-sm text-zinc-700 px-2 py-0.5 rounded-full shadow-sm">
+                {img.badge}
+              </span>
+            )}
+          </div>
+        </a>
+        <div className="p-3">
+          <p className="text-[13px] font-semibold text-zinc-800 truncate">{s.colors[0]} {s.subcategory}</p>
+          {img && <p className="text-[13px] font-bold text-orange-500 mt-0.5">{img.priceRange}</p>}
+          <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{s.reason}</p>
+          {img && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] text-yellow-500">★ {img.rating}</span>
+              <span className="text-[9px] text-zinc-300">{img.soldCount}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Full card
+  return (
+    <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden animate-pop-in">
+      {/* Product images row */}
+      {s.products && s.products.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto no-scrollbar p-3 pb-2 bg-zinc-50/50">
+          {s.products.map((p) => (
+            <a key={p.id} href={p.shopUrl} target="_blank" rel="noopener noreferrer"
+              className="flex-shrink-0 w-[120px] rounded-xl overflow-hidden border border-zinc-100 bg-white hover:shadow-md active:scale-[0.97] transition-all">
+              <div className="aspect-square bg-zinc-50 overflow-hidden relative">
+                <img src={p.image} alt={p.alt} className="w-full h-full object-cover" loading="lazy" />
+                <span className="absolute top-1.5 left-1.5 text-[8px] font-bold bg-white/90 backdrop-blur-sm text-zinc-700 px-1.5 py-0.5 rounded-full">{p.badge}</span>
+              </div>
+              <div className="p-2">
+                <p className="text-[11px] font-bold text-orange-500">{p.priceRange}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="text-[9px] text-yellow-500">★ {p.rating}</span>
+                  <span className="text-[8px] text-zinc-300">{p.soldCount}</span>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-[15px] font-semibold text-zinc-900">{s.colors[0]} {s.subcategory}</p>
+            <p className="text-[12px] text-zinc-500 mt-1 leading-relaxed">{s.reason}</p>
+          </div>
+          <span className="text-2xl flex-shrink-0">{CAT_LABELS[s.category]?.emoji || "👕"}</span>
+        </div>
+
+        {/* Pairing tip */}
+        {s.pairingTip && (
+          <div className="mt-3 bg-zinc-50 rounded-xl p-3">
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">💡 How to wear it</p>
+            <p className="text-[11px] text-zinc-600 leading-relaxed">{s.pairingTip}</p>
+          </div>
+        )}
+
+        {/* Shop buttons */}
+        <div className="mt-3">
+          <button onClick={() => setShowStores(!showStores)}
+            className="w-full h-10 rounded-xl bg-zinc-900 text-white text-[12px] font-semibold hover:bg-zinc-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0" />
+            </svg>
+            {showStores ? "Hide stores" : "Where to buy"}
+          </button>
+
+          {showStores && (
+            <div className="mt-2 grid grid-cols-3 gap-1.5 animate-fade-up">
+              {s.shoppingLinks.slice(0, 6).map((l) => (
+                <a key={l.store} href={l.url} target="_blank" rel="noopener noreferrer"
+                  className="flex flex-col items-center gap-1 p-2 rounded-xl bg-zinc-50 hover:bg-zinc-100 active:scale-95 transition-all">
+                  <span className="text-lg">{l.icon}</span>
+                  <span className="text-[10px] font-medium text-zinc-600">{l.store}</span>
+                  {l.tag && <span className="text-[8px] text-zinc-400">{l.tag}</span>}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CAT_LABELS_ALT: Record<string, string> = {
   top: "👕", bottom: "👖", shoes: "👟", outerwear: "🧥", accessory: "⌚",
 };

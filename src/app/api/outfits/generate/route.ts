@@ -18,8 +18,15 @@ export async function POST(request: NextRequest) {
     const count = typeof body.count === "number" ? body.count : 8;
     const gender = typeof body.gender === "string" ? body.gender : undefined;
     const showSuggested = typeof body.showSuggested === "boolean" ? body.showSuggested : true;
+    const excludeIds = Array.isArray(body.excludeIds) ? body.excludeIds as string[] : [];
 
-    const items = await db.select().from(clothingItems);
+    let items = await db.select().from(clothingItems);
+
+    // Filter out excluded items
+    if (excludeIds.length > 0) {
+      const excludeSet = new Set(excludeIds);
+      items = items.filter(item => !excludeSet.has(item.id));
+    }
 
     if (items.length < 2) {
       return NextResponse.json(
@@ -32,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     if (outfitResults.length === 0) {
       return NextResponse.json(
-        { error: "No outfit combinations found. Try adding more items or changing your style." },
+        { error: "No outfit combinations found. Try a different style or add more items." },
         { status: 400 }
       );
     }

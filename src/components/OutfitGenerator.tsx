@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ClothingItem } from "@/db/schema";
 import { OCCASIONS, SEASONS, STYLE_PRESETS } from "@/lib/colors";
 import type { AccessorySuggestion } from "@/lib/colors";
@@ -38,7 +38,29 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
   const [suggestedOn, setSuggestedOn] = useState(showSuggested);
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  // Exclude items feature
+  const [allItems, setAllItems] = useState<ClothingItem[]>([]);
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+  const [showExclude, setShowExclude] = useState(false);
+
   const filteredPresets = STYLE_PRESETS.filter(s => s.gender === "all" || s.gender === gender);
+
+  // Load closet items for exclusion picker
+  useEffect(() => {
+    fetch("/api/clothes")
+      .then(r => r.ok ? r.json() : [])
+      .then(setAllItems)
+      .catch(() => {});
+  }, []);
+
+  const toggleExclude = (id: string) => {
+    setExcludedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const generate = async () => {
     setLoading(true);
@@ -56,6 +78,7 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
           count: 8,
           gender,
           showSuggested: suggestedOn,
+          excludeIds: [...excludedIds],
         }),
       });
       const ct = res.headers.get("content-type") || "";
@@ -93,7 +116,6 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
     const newVal = !suggestedOn;
     setSuggestedOn(newVal);
     if (onToggleSuggested) onToggleSuggested(newVal);
-    // Also persist
     fetch("/api/preferences", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -109,7 +131,7 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
 
   return (
     <div>
-      {/* Style chips — gender filtered */}
+      {/* Style chips */}
       <div className="mb-5 animate-fade-up">
         <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-3">Pick your vibe</p>
         <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1">
@@ -124,38 +146,95 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
         </div>
       </div>
 
-      {/* Toggle suggested outfits + Filters */}
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setShowFilters(!showFilters)}
-          className="text-[12px] text-zinc-400 font-medium flex items-center gap-1 hover:text-zinc-600 transition-colors">
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
-          </svg>
-          {showFilters ? "Hide filters" : "Filters"}
-        </button>
+      {/* Filters & Options Row */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex gap-2">
+          <button onClick={() => { setShowFilters(!showFilters); setShowExclude(false); }}
+            className={`text-[12px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
+              showFilters ? "bg-zinc-900 text-white" : "text-zinc-500 bg-zinc-100 hover:bg-zinc-200"
+            }`}>
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+            </svg>
+            Filters
+          </button>
+          <button onClick={() => { setShowExclude(!showExclude); setShowFilters(false); }}
+            className={`text-[12px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
+              showExclude ? "bg-zinc-900 text-white" : (excludedIds.size > 0 ? "bg-red-100 text-red-600" : "text-zinc-500 bg-zinc-100 hover:bg-zinc-200")
+            }`}>
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" /><path d="M4.93 4.93l14.14 14.14" />
+            </svg>
+            Exclude{excludedIds.size > 0 && ` (${excludedIds.size})`}
+          </button>
+        </div>
 
-        {/* Toggle for suggested outfits */}
         <button onClick={toggleSuggested}
           className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
-          <span>{suggestedOn ? "Suggestions ON" : "Suggestions OFF"}</span>
+          <span className="hidden sm:inline">{suggestedOn ? "Suggestions ON" : "Suggestions OFF"}</span>
           <div className={`w-9 h-5 rounded-full relative transition-colors ${suggestedOn ? "bg-zinc-900" : "bg-zinc-200"}`}>
             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${suggestedOn ? "left-[18px]" : "left-0.5"}`} />
           </div>
         </button>
       </div>
 
+      {/* Filters Panel */}
       {showFilters && (
-        <div className="grid grid-cols-2 gap-3 mb-4 animate-fade-up">
-          <select value={occasion} onChange={(e) => setOccasion(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none focus:border-zinc-400">
-            <option value="">Any occasion</option>
-            {OCCASIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-          <select value={season} onChange={(e) => setSeason(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none focus:border-zinc-400">
-            <option value="">Any weather</option>
-            {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+        <div className="mb-4 p-3 bg-zinc-50 rounded-2xl animate-fade-up">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-1.5 block">Occasion</label>
+              <select value={occasion} onChange={(e) => setOccasion(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none focus:border-zinc-400">
+                <option value="">Any</option>
+                {OCCASIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-1.5 block">Weather</label>
+              <select value={season} onChange={(e) => setSeason(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none focus:border-zinc-400">
+                <option value="">Any</option>
+                {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exclude Items Panel */}
+      {showExclude && (
+        <div className="mb-4 p-3 bg-zinc-50 rounded-2xl animate-fade-up">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Tap items to exclude</p>
+            {excludedIds.size > 0 && (
+              <button onClick={() => setExcludedIds(new Set())} className="text-[11px] text-red-500 font-medium">
+                Clear all
+              </button>
+            )}
+          </div>
+          {allItems.length === 0 ? (
+            <p className="text-[12px] text-zinc-400 text-center py-4">No items in your closet yet</p>
+          ) : (
+            <div className="grid grid-cols-5 gap-1.5 max-h-[200px] overflow-y-auto">
+              {allItems.map(item => {
+                const isExcluded = excludedIds.has(item.id);
+                return (
+                  <button key={item.id} onClick={() => toggleExclude(item.id)}
+                    className={`aspect-square rounded-lg overflow-hidden relative transition-all ${
+                      isExcluded ? "ring-2 ring-red-500 opacity-50" : "hover:ring-2 hover:ring-zinc-300"
+                    }`}>
+                    <img src={item.imageData} alt={item.name} className="w-full h-full object-cover" />
+                    {isExcluded && (
+                      <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
+                        <div className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] font-bold">✕</div>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -239,7 +318,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
   const outer = outfit.items.find((i) => i.category === "outerwear");
   const scoreLabel = outfit.score >= 90 ? "Perfect" : outfit.score >= 80 ? "Great" : outfit.score >= 65 ? "Good" : "OK";
 
-  // Source label badge
   const sourceLabel = outfit.source === "closet" ? "From your closet" : outfit.source === "suggested" ? "Suggested outfit" : "Mixed";
   const sourceBg = outfit.source === "closet" ? "bg-green-100 text-green-700" : outfit.source === "suggested" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700";
 
@@ -259,7 +337,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
   return (
     <div className="animate-scale-in">
       <div className="bg-zinc-50 rounded-3xl overflow-hidden relative">
-        {/* Arrows */}
         {onPrev && (
           <button onClick={onPrev} className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm active:scale-90 transition-transform">
             <svg viewBox="0 0 24 24" className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -271,7 +348,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
           </button>
         )}
 
-        {/* Badges */}
         <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
           <span className="bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">Look {index + 1}</span>
           <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold shadow-sm ${sourceBg}`}>{sourceLabel}</span>
@@ -280,7 +356,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
           <span className="bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow-sm">{outfit.score} · {scoreLabel}</span>
         </div>
 
-        {/* Stacked outfit */}
         <div className="flex justify-center py-8 px-4">
           <div className="relative">
             {outer && (
@@ -326,7 +401,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         </div>
       </div>
 
-      {/* Suggested pieces — what to buy */}
       {outfit.suggestedPieces.length > 0 && (
         <div className="mt-3 bg-orange-50 rounded-2xl p-3 animate-fade-up">
           <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-widest mb-2">🛒 Suggested items to complete this look</p>
@@ -348,7 +422,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         </div>
       )}
 
-      {/* Item chips */}
       <div className="mt-3 flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
         {outfit.items.map((item, i) => (
           <div key={item.id} className="flex-shrink-0 flex items-center gap-1.5 bg-zinc-50 rounded-full pl-0.5 pr-2.5 py-0.5 animate-fade-up"
@@ -361,7 +434,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         ))}
       </div>
 
-      {/* Actions */}
       <div className="mt-3 flex gap-2 animate-fade-up" style={{ animationDelay: "0.35s" }}>
         <button onClick={onSave} disabled={saved}
           className={`flex-1 h-11 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 ${
@@ -377,7 +449,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         </button>
       </div>
 
-      {/* Details */}
       {showDetails && (
         <div className="mt-4 space-y-4 animate-fade-up">
           {outfit.accessories.length > 0 && (
@@ -417,7 +488,6 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         </div>
       )}
 
-      {/* Swap picker */}
       {swapCategory && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) setSwapCategory(null); }}>
