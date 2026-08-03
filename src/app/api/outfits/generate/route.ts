@@ -15,10 +15,11 @@ export async function POST(request: NextRequest) {
     const occasion = typeof body.occasion === "string" ? body.occasion : undefined;
     const season = typeof body.season === "string" ? body.season : undefined;
     const styleId = typeof body.styleId === "string" ? body.styleId : undefined;
-    const count = typeof body.count === "number" ? body.count : 8;
+    const count = typeof body.count === "number" ? body.count : 10;
     const gender = typeof body.gender === "string" ? body.gender : undefined;
     const showSuggested = typeof body.showSuggested === "boolean" ? body.showSuggested : true;
     const excludeIds = Array.isArray(body.excludeIds) ? body.excludeIds as string[] : [];
+    const suggestCategories = Array.isArray(body.suggestCategories) ? body.suggestCategories as string[] : ["top", "bottom", "shoes", "accessory"];
 
     let items = await db.select().from(clothingItems);
 
@@ -35,7 +36,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const outfitResults = generateOutfits(items, { occasion, season, count, styleId, gender, showSuggested });
+    const outfitResults = generateOutfits(items, { 
+      occasion, 
+      season, 
+      count, 
+      styleId, 
+      gender, 
+      showSuggested,
+      suggestCategories,
+    });
 
     if (outfitResults.length === 0) {
       return NextResponse.json(

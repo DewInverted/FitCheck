@@ -24,6 +24,14 @@ interface Props {
   onToggleSuggested?: (val: boolean) => void;
 }
 
+const SUGGEST_CATEGORIES = [
+  { id: "top", label: "Tops", emoji: "👕" },
+  { id: "bottom", label: "Bottoms", emoji: "👖" },
+  { id: "shoes", label: "Shoes", emoji: "👟" },
+  { id: "outerwear", label: "Layers", emoji: "🧥" },
+  { id: "accessory", label: "Accessories", emoji: "⌚" },
+];
+
 export default function OutfitGenerator({ defaultStyle = "", gender = "", showSuggested = true, onToggleSuggested }: Props) {
   const [outfits, setOutfits] = useState<OutfitResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,17 +43,18 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
   const [activeOutfit, setActiveOutfit] = useState(0);
   const [savedOutfits, setSavedOutfits] = useState<Set<number>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
-  const [suggestedOn, setSuggestedOn] = useState(showSuggested);
+  const [suggestionsOn, setSuggestionsOn] = useState(showSuggested);
+  const [suggestCategories, setSuggestCategories] = useState<Set<string>>(new Set(["top", "bottom", "shoes", "accessory"]));
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // Exclude items feature
+  // Exclude items
   const [allItems, setAllItems] = useState<ClothingItem[]>([]);
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [showExclude, setShowExclude] = useState(false);
+  const [showSuggestOptions, setShowSuggestOptions] = useState(false);
 
   const filteredPresets = STYLE_PRESETS.filter(s => s.gender === "all" || s.gender === gender);
 
-  // Load closet items for exclusion picker
   useEffect(() => {
     fetch("/api/clothes")
       .then(r => r.ok ? r.json() : [])
@@ -58,6 +67,15 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSuggestCategory = (cat: string) => {
+    setSuggestCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
       return next;
     });
   };
@@ -75,9 +93,10 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
           occasion: occasion || undefined,
           season: season || undefined,
           styleId: selectedStyle || undefined,
-          count: 8,
+          count: 10,
           gender,
-          showSuggested: suggestedOn,
+          showSuggested: suggestionsOn,
+          suggestCategories: [...suggestCategories],
           excludeIds: [...excludedIds],
         }),
       });
@@ -112,9 +131,9 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
     } catch {}
   };
 
-  const toggleSuggested = () => {
-    const newVal = !suggestedOn;
-    setSuggestedOn(newVal);
+  const toggleSuggestions = () => {
+    const newVal = !suggestionsOn;
+    setSuggestionsOn(newVal);
     if (onToggleSuggested) onToggleSuggested(newVal);
     fetch("/api/preferences", {
       method: "PATCH",
@@ -123,11 +142,16 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
     }).catch(() => {});
   };
 
-  const displayedOutfits = suggestedOn
+  // Filter outfits based on suggestions toggle
+  const displayedOutfits = suggestionsOn
     ? outfits
     : outfits.filter(o => o.source === "closet");
 
   const current = displayedOutfits[activeOutfit];
+
+  // Count by source
+  const closetCount = outfits.filter(o => o.source === "closet").length;
+  const suggestedCount = outfits.filter(o => o.source === "suggested" || o.source === "mixed").length;
 
   return (
     <div>
@@ -146,36 +170,44 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
         </div>
       </div>
 
-      {/* Filters & Options Row */}
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <div className="flex gap-2">
-          <button onClick={() => { setShowFilters(!showFilters); setShowExclude(false); }}
-            className={`text-[12px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
-              showFilters ? "bg-zinc-900 text-white" : "text-zinc-500 bg-zinc-100 hover:bg-zinc-200"
+      {/* Options Row */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button onClick={() => { setShowFilters(!showFilters); setShowExclude(false); setShowSuggestOptions(false); }}
+          className={`text-[11px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
+            showFilters ? "bg-zinc-900 text-white" : "text-zinc-500 bg-zinc-100 hover:bg-zinc-200"
+          }`}>
+          <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+          </svg>
+          Filters
+        </button>
+        <button onClick={() => { setShowExclude(!showExclude); setShowFilters(false); setShowSuggestOptions(false); }}
+          className={`text-[11px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
+            showExclude ? "bg-zinc-900 text-white" : (excludedIds.size > 0 ? "bg-red-100 text-red-600" : "text-zinc-500 bg-zinc-100 hover:bg-zinc-200")
+          }`}>
+          <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" /><path d="M4.93 4.93l14.14 14.14" />
+          </svg>
+          Exclude{excludedIds.size > 0 && ` (${excludedIds.size})`}
+        </button>
+
+        <div className="flex-1" />
+
+        {/* Suggestions Toggle + Options */}
+        <div className="flex items-center gap-1">
+          <button onClick={() => { setShowSuggestOptions(!showSuggestOptions); setShowFilters(false); setShowExclude(false); }}
+            className={`text-[11px] font-medium px-2 py-1.5 rounded-l-full transition-colors ${
+              showSuggestOptions ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500"
             }`}>
-            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
-            </svg>
-            Filters
+            ⚙️
           </button>
-          <button onClick={() => { setShowExclude(!showExclude); setShowFilters(false); }}
-            className={`text-[12px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors ${
-              showExclude ? "bg-zinc-900 text-white" : (excludedIds.size > 0 ? "bg-red-100 text-red-600" : "text-zinc-500 bg-zinc-100 hover:bg-zinc-200")
+          <button onClick={toggleSuggestions}
+            className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-r-full transition-colors ${
+              suggestionsOn ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-400"
             }`}>
-            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" /><path d="M4.93 4.93l14.14 14.14" />
-            </svg>
-            Exclude{excludedIds.size > 0 && ` (${excludedIds.size})`}
+            {suggestionsOn ? "✓ Suggestions" : "Suggestions OFF"}
           </button>
         </div>
-
-        <button onClick={toggleSuggested}
-          className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
-          <span className="hidden sm:inline">{suggestedOn ? "Suggestions ON" : "Suggestions OFF"}</span>
-          <div className={`w-9 h-5 rounded-full relative transition-colors ${suggestedOn ? "bg-zinc-900" : "bg-zinc-200"}`}>
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${suggestedOn ? "left-[18px]" : "left-0.5"}`} />
-          </div>
-        </button>
       </div>
 
       {/* Filters Panel */}
@@ -185,7 +217,7 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
             <div>
               <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-1.5 block">Occasion</label>
               <select value={occasion} onChange={(e) => setOccasion(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none focus:border-zinc-400">
+                className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none">
                 <option value="">Any</option>
                 {OCCASIONS.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
@@ -193,7 +225,7 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
             <div>
               <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider mb-1.5 block">Weather</label>
               <select value={season} onChange={(e) => setSeason(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none focus:border-zinc-400">
+                className="w-full h-10 px-3 rounded-xl border border-zinc-200 text-[13px] text-zinc-700 bg-white focus:outline-none">
                 <option value="">Any</option>
                 {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -208,26 +240,24 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Tap items to exclude</p>
             {excludedIds.size > 0 && (
-              <button onClick={() => setExcludedIds(new Set())} className="text-[11px] text-red-500 font-medium">
-                Clear all
-              </button>
+              <button onClick={() => setExcludedIds(new Set())} className="text-[11px] text-red-500 font-medium">Clear</button>
             )}
           </div>
           {allItems.length === 0 ? (
-            <p className="text-[12px] text-zinc-400 text-center py-4">No items in your closet yet</p>
+            <p className="text-[12px] text-zinc-400 text-center py-4">No items in closet</p>
           ) : (
-            <div className="grid grid-cols-5 gap-1.5 max-h-[200px] overflow-y-auto">
+            <div className="grid grid-cols-6 gap-1 max-h-[160px] overflow-y-auto">
               {allItems.map(item => {
                 const isExcluded = excludedIds.has(item.id);
                 return (
                   <button key={item.id} onClick={() => toggleExclude(item.id)}
                     className={`aspect-square rounded-lg overflow-hidden relative transition-all ${
-                      isExcluded ? "ring-2 ring-red-500 opacity-50" : "hover:ring-2 hover:ring-zinc-300"
+                      isExcluded ? "ring-2 ring-red-500 opacity-40" : ""
                     }`}>
                     <img src={item.imageData} alt={item.name} className="w-full h-full object-cover" />
                     {isExcluded && (
-                      <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
-                        <div className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] font-bold">✕</div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-red-500 text-lg font-bold">✕</span>
                       </div>
                     )}
                   </button>
@@ -235,6 +265,31 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Suggest Options Panel */}
+      {showSuggestOptions && (
+        <div className="mb-4 p-3 bg-green-50 rounded-2xl animate-fade-up">
+          <p className="text-[11px] font-semibold text-green-700 uppercase tracking-wider mb-2">What should we suggest?</p>
+          <div className="flex flex-wrap gap-2">
+            {SUGGEST_CATEGORIES.map(cat => {
+              const isOn = suggestCategories.has(cat.id);
+              return (
+                <button key={cat.id} onClick={() => toggleSuggestCategory(cat.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all ${
+                    isOn ? "bg-green-600 text-white" : "bg-white text-zinc-500 border border-zinc-200"
+                  }`}>
+                  <span>{cat.emoji}</span>
+                  {cat.label}
+                  {isOn && <span>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-green-600 mt-2">
+            We&apos;ll suggest items in these categories that match your style
+          </p>
         </div>
       )}
 
@@ -251,7 +306,14 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
       {generated && displayedOutfits.length > 0 && (
         <div ref={resultsRef} className="animate-fade-up">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">{displayedOutfits.length} looks</p>
+            <div>
+              <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest">{displayedOutfits.length} looks</p>
+              {outfits.length > 0 && (
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  {closetCount} from closet{suggestedCount > 0 && ` · ${suggestedCount} with suggestions`}
+                </p>
+              )}
+            </div>
             <div className="flex gap-1.5">
               {displayedOutfits.map((_, i) => (
                 <button key={i} onClick={() => setActiveOutfit(i)}
@@ -291,7 +353,9 @@ export default function OutfitGenerator({ defaultStyle = "", gender = "", showSu
       {generated && displayedOutfits.length === 0 && !error && (
         <div className="text-center py-14 animate-fade-up">
           <p className="text-[15px] font-semibold text-zinc-700 mb-1">No combinations found</p>
-          <p className="text-[13px] text-zinc-400">Try a different style or add more items</p>
+          <p className="text-[13px] text-zinc-400">
+            {!suggestionsOn ? "Turn on suggestions to see more options" : "Try a different style or add more items"}
+          </p>
         </div>
       )}
     </div>
@@ -310,7 +374,33 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
   const [swapCategory, setSwapCategory] = useState<string | null>(null);
   const [swapOptions, setSwapOptions] = useState<ClothingItem[]>([]);
   const [loadingSwap, setLoadingSwap] = useState(false);
+  const [productImages, setProductImages] = useState<Record<string, { image: string; shopUrl: string }>>({});
   void gender;
+
+  // Fetch product images for suggested pieces
+  useEffect(() => {
+    if (outfit.suggestedPieces.length === 0) return;
+    
+    const fetchImages = async () => {
+      const images: Record<string, { image: string; shopUrl: string }> = {};
+      for (const piece of outfit.suggestedPieces) {
+        try {
+          const r = await fetch(`/api/products?subcategory=${encodeURIComponent(piece.subcategory)}&color=${encodeURIComponent(piece.color)}&gender=${gender || "male"}`);
+          if (r.ok) {
+            const products = await r.json();
+            if (products[0]) {
+              images[`${piece.category}-${piece.subcategory}`] = {
+                image: products[0].image,
+                shopUrl: products[0].shopUrl,
+              };
+            }
+          }
+        } catch {}
+      }
+      setProductImages(images);
+    };
+    fetchImages();
+  }, [outfit.suggestedPieces, gender]);
 
   const top = outfit.items.find((i) => i.category === "top");
   const bottom = outfit.items.find((i) => i.category === "bottom");
@@ -338,12 +428,12 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
     <div className="animate-scale-in">
       <div className="bg-zinc-50 rounded-3xl overflow-hidden relative">
         {onPrev && (
-          <button onClick={onPrev} className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm active:scale-90 transition-transform">
+          <button onClick={onPrev} className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm active:scale-90">
             <svg viewBox="0 0 24 24" className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         )}
         {onNext && (
-          <button onClick={onNext} className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm active:scale-90 transition-transform">
+          <button onClick={onNext} className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm active:scale-90">
             <svg viewBox="0 0 24 24" className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         )}
@@ -364,68 +454,67 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
                   <div className="w-[60px] h-[60px] rounded-xl overflow-hidden border-[3px] border-white shadow-lg bg-white">
                     <img src={outer.imageData} alt={outer.name} className="w-full h-full object-cover" />
                   </div>
-                  <p className="text-[8px] text-zinc-400 text-center mt-1 font-medium w-[60px] truncate">{outer.name}</p>
                 </button>
               </div>
             )}
 
             <div className="flex flex-col items-center">
-              <button onClick={() => openSwap("top")} className="w-[160px] aspect-[4/5] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white relative z-[1] animate-stack-drop group"
-                style={{ animationDelay: "0.05s" }}>
+              <button onClick={() => openSwap("top")} className="w-[160px] aspect-[4/5] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white relative z-[1] animate-stack-drop group">
                 {top ? <img src={top.imageData} alt={top.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-zinc-200 flex items-center justify-center text-zinc-400 text-[11px]">Top</div>}
-                <div className="absolute inset-0 bg-black/0 group-active:bg-black/10 transition-colors flex items-end justify-center pb-2">
-                  <span className="text-[8px] text-white/0 group-active:text-white/80 bg-black/40 px-2 py-0.5 rounded-full font-medium">tap to swap</span>
-                </div>
               </button>
 
-              <button onClick={() => openSwap("bottom")} className="w-[144px] aspect-[3/4] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white -mt-3 relative z-[2] animate-stack-drop group"
-                style={{ animationDelay: "0.15s" }}>
+              <button onClick={() => openSwap("bottom")} className="w-[144px] aspect-[3/4] rounded-2xl overflow-hidden border-[3px] border-white shadow-lg bg-white -mt-3 relative z-[2] animate-stack-drop group">
                 {bottom ? <img src={bottom.imageData} alt={bottom.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-zinc-200 flex items-center justify-center text-zinc-400 text-[11px]">Bottom</div>}
-                <div className="absolute inset-0 bg-black/0 group-active:bg-black/10 transition-colors flex items-end justify-center pb-2">
-                  <span className="text-[8px] text-white/0 group-active:text-white/80 bg-black/40 px-2 py-0.5 rounded-full font-medium">tap to swap</span>
-                </div>
               </button>
 
-              <button onClick={() => openSwap("shoes")} className="w-[108px] aspect-[5/4] rounded-xl overflow-hidden border-[3px] border-white shadow-md bg-white -mt-3 relative z-[3] animate-stack-drop group"
-                style={{ animationDelay: "0.25s" }}>
+              <button onClick={() => openSwap("shoes")} className="w-[108px] aspect-[5/4] rounded-xl overflow-hidden border-[3px] border-white shadow-md bg-white -mt-3 relative z-[3] animate-stack-drop group">
                 {shoes ? <img src={shoes.imageData} alt={shoes.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-zinc-200 flex items-center justify-center text-zinc-400 text-[11px]">Shoes</div>}
-                <div className="absolute inset-0 bg-black/0 group-active:bg-black/10 transition-colors flex items-end justify-center pb-1">
-                  <span className="text-[8px] text-white/0 group-active:text-white/80 bg-black/40 px-2 py-0.5 rounded-full font-medium">tap to swap</span>
-                </div>
               </button>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Suggested pieces with REAL product images */}
       {outfit.suggestedPieces.length > 0 && (
-        <div className="mt-3 bg-orange-50 rounded-2xl p-3 animate-fade-up">
-          <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-widest mb-2">🛒 Suggested items to complete this look</p>
-          <div className="space-y-2">
-            {outfit.suggestedPieces.map((piece, i) => (
-              <a key={i} href={piece.shopUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 p-2 rounded-xl bg-white hover:bg-orange-100/50 transition-colors active:scale-[0.98]">
-                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center text-[16px] flex-shrink-0">
-                  {piece.category === "top" ? "👕" : piece.category === "bottom" ? "👖" : piece.category === "shoes" ? "👟" : "🧥"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-semibold text-zinc-800">{piece.color} {piece.subcategory}</p>
-                  <p className="text-[10px] text-zinc-500 truncate">{piece.reason}</p>
-                </div>
-                <span className="text-[10px] text-orange-500 font-medium flex-shrink-0">Shop →</span>
-              </a>
-            ))}
+        <div className="mt-3 bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-3 border border-orange-100 animate-fade-up">
+          <p className="text-[10px] font-semibold text-orange-600 uppercase tracking-widest mb-2">
+            🛒 Buy these to complete the look
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {outfit.suggestedPieces.map((piece, i) => {
+              const key = `${piece.category}-${piece.subcategory}`;
+              const product = productImages[key];
+              return (
+                <a key={i} href={product?.shopUrl || piece.shopUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 p-2 rounded-xl bg-white hover:shadow-md transition-all active:scale-[0.98]">
+                  <div className="w-12 h-12 rounded-lg bg-orange-100 flex-shrink-0 overflow-hidden">
+                    {product?.image ? (
+                      <img src={product.image} alt={piece.subcategory} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xl">
+                        {piece.category === "top" ? "👕" : piece.category === "bottom" ? "👖" : piece.category === "shoes" ? "👟" : piece.category === "accessory" ? "⌚" : "🧥"}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-zinc-800 truncate">{piece.color} {piece.subcategory}</p>
+                    <p className="text-[9px] text-zinc-400 truncate">{piece.reason}</p>
+                  </div>
+                </a>
+              );
+            })}
           </div>
         </div>
       )}
 
-      <div className="mt-3 flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+      {/* Item chips */}
+      <div className="mt-3 flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
         {outfit.items.map((item, i) => (
-          <div key={item.id} className="flex-shrink-0 flex items-center gap-1.5 bg-zinc-50 rounded-full pl-0.5 pr-2.5 py-0.5 animate-fade-up"
-            style={{ animationDelay: `${0.3 + i * 0.06}s` }}>
+          <div key={item.id} className="flex-shrink-0 flex items-center gap-1.5 bg-zinc-50 rounded-full pl-0.5 pr-2.5 py-0.5">
             <div className="w-6 h-6 rounded-full overflow-hidden bg-zinc-200 flex-shrink-0">
               <img src={item.imageData} alt="" className="w-full h-full object-cover" />
             </div>
@@ -434,18 +523,16 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         ))}
       </div>
 
-      <div className="mt-3 flex gap-2 animate-fade-up" style={{ animationDelay: "0.35s" }}>
+      <div className="mt-3 flex gap-2">
         <button onClick={onSave} disabled={saved}
           className={`flex-1 h-11 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 ${
             saved ? "bg-zinc-100 text-zinc-400" : "bg-zinc-900 text-white hover:bg-zinc-800"
           }`}>
-          {saved ? (
-            <><svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg> Saved</>
-          ) : "Save Look"}
+          {saved ? "✓ Saved" : "Save Look"}
         </button>
         <button onClick={() => setShowDetails(!showDetails)}
-          className="h-11 px-4 rounded-xl bg-zinc-100 text-zinc-600 text-[13px] font-medium hover:bg-zinc-200 active:scale-[0.97] transition-all">
-          {showDetails ? "Less" : "Details"}
+          className="h-11 px-4 rounded-xl bg-zinc-100 text-zinc-600 text-[13px] font-medium hover:bg-zinc-200 active:scale-[0.97]">
+          {showDetails ? "Less" : "More"}
         </button>
       </div>
 
@@ -453,41 +540,27 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
         <div className="mt-4 space-y-4 animate-fade-up">
           {outfit.accessories.length > 0 && (
             <div>
-              <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">Complete the look</p>
+              <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">Accessories</p>
               <div className="space-y-1">
                 {outfit.accessories.map((acc, i) => (
                   <a key={i} href={`https://shopee.ph/search?keyword=${encodeURIComponent(acc.shopQuery)}`}
                     target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-50 transition-colors group">
-                    <span className="text-lg w-7 text-center">{acc.emoji}</span>
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-50 transition-colors">
+                    <span className="text-lg">{acc.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium text-zinc-700">{acc.name}</p>
                       <p className="text-[11px] text-zinc-400 truncate">{acc.reason}</p>
                     </div>
-                    <span className="text-[10px] text-zinc-300 group-hover:text-zinc-500 flex-shrink-0">Shop →</span>
+                    <span className="text-[10px] text-zinc-300">→</span>
                   </a>
                 ))}
               </div>
             </div>
           )}
-          <div>
-            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">Style references</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {[
-                { label: "Pinterest", href: outfit.inspoLinks.pinterest, hover: "hover:bg-red-50 hover:text-red-600" },
-                { label: "TikTok", href: outfit.inspoLinks.tiktok, hover: "hover:bg-zinc-100 hover:text-zinc-900" },
-                { label: "Instagram", href: outfit.inspoLinks.instagram, hover: "hover:bg-purple-50 hover:text-purple-600" },
-              ].map((l) => (
-                <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer"
-                  className={`h-10 rounded-xl bg-zinc-50 transition-all active:scale-95 flex items-center justify-center text-[12px] font-medium text-zinc-500 ${l.hover}`}>
-                  {l.label}
-                </a>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
+      {/* Swap picker */}
       {swapCategory && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center animate-fade-in"
           onClick={(e) => { if (e.target === e.currentTarget) setSwapCategory(null); }}>
@@ -504,12 +577,12 @@ function OutfitCard({ outfit, index, saved, onSave, onPrev, onNext, onSwap, gend
               {loadingSwap ? (
                 <div className="flex justify-center py-8"><span className="w-5 h-5 border-2 border-zinc-200 border-t-zinc-600 rounded-full animate-spin" /></div>
               ) : swapOptions.length === 0 ? (
-                <p className="text-center text-[13px] text-zinc-400 py-8">No other {swapCategory} items in your closet</p>
+                <p className="text-center text-[13px] text-zinc-400 py-8">No other {swapCategory} items</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {swapOptions.map(item => (
                     <button key={item.id} onClick={() => { if (onSwap) onSwap(swapCategory, item); setSwapCategory(null); }}
-                      className="aspect-square rounded-xl overflow-hidden bg-zinc-100 active:scale-95 transition-all relative">
+                      className="aspect-square rounded-xl overflow-hidden bg-zinc-100 active:scale-95 relative">
                       <img src={item.imageData} alt={item.name} className="w-full h-full object-cover" />
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-1.5 pt-4">
                         <p className="text-[9px] font-medium text-white truncate">{item.name}</p>

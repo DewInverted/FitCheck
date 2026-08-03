@@ -118,77 +118,68 @@ function buildInspoLinks(items: ClothingItem[], stylePreset?: StylePreset) {
   };
 }
 
-// Analyze what categories the user is missing for a given style
-function analyzeStyleGap(
+// Get suggested pieces for categories the user is missing or doesn't match style
+function getSuggestedPiecesForStyle(
   items: ClothingItem[],
-  stylePreset: StylePreset
-): { category: string; hasMatch: boolean; bestMatch: ClothingItem | null; suggestedPiece: SuggestedPiece | null }[] {
-  const categories = ["top", "bottom", "shoes"];
-  const results: { category: string; hasMatch: boolean; bestMatch: ClothingItem | null; suggestedPiece: SuggestedPiece | null }[] = [];
+  stylePreset: StylePreset,
+  suggestCategories: string[],
+  gender: string
+): SuggestedPiece[] {
+  const suggestions: SuggestedPiece[] = [];
+  const g = gender === "female" ? "women" : "men";
 
-  for (const cat of categories) {
+  for (const cat of suggestCategories) {
     const prefs = stylePreset.preferredCategories[cat] || [];
-    const palette = stylePreset.colorPalette;
+    const keyPiece = stylePreset.keyPieces.find((kp) => kp.category === cat);
     const catItems = items.filter((i) => i.category === cat);
 
-    // Check if any item matches the style
-    const styleMatches = catItems.filter((i) => {
+    // Check if user has items matching this style
+    const hasStyleMatch = catItems.some((i) => {
       const subMatch = !prefs.length || (i.subcategory && prefs.includes(i.subcategory));
-      const colorMatch = palette.includes(getColorFamily(i.primaryColor));
+      const colorMatch = stylePreset.colorPalette.includes(getColorFamily(i.primaryColor));
       return subMatch && colorMatch;
     });
 
-    // Partial matches (at least subcategory matches)
-    const partialMatches = catItems.filter((i) => {
-      return i.subcategory && prefs.includes(i.subcategory);
-    });
+    if (!hasStyleMatch) {
+      const suggestedSub = keyPiece?.subcategory || prefs[0] || getDefaultSubcategory(cat);
+      const suggestedColor = keyPiece?.colors[0] || "Black";
+      const query = `${suggestedColor} ${suggestedSub} ${g}`;
 
-    if (styleMatches.length > 0) {
-      results.push({ category: cat, hasMatch: true, bestMatch: styleMatches[0], suggestedPiece: null });
-    } else if (partialMatches.length > 0) {
-      results.push({ category: cat, hasMatch: true, bestMatch: partialMatches[0], suggestedPiece: null });
-    } else if (catItems.length > 0) {
-      // Has items in this category but none match the style
-      const keyPiece = stylePreset.keyPieces.find((kp) => kp.category === cat);
-      const suggestedSub = keyPiece?.subcategory || prefs[0] || "Item";
-      const suggestedColor = keyPiece?.colors[0] || "Black";
-      const query = `${suggestedColor} ${suggestedSub} men`;
-      results.push({
+      suggestions.push({
         category: cat,
-        hasMatch: false,
-        bestMatch: catItems[0], // use best available
-        suggestedPiece: {
-          category: cat,
-          subcategory: suggestedSub,
-          color: suggestedColor,
-          reason: `Your closet doesn't have ${suggestedSub.toLowerCase()} in ${stylePreset.label} colors. This would complete the look.`,
-          shopQuery: query,
-          shopUrl: `https://shopee.ph/search?keyword=${encodeURIComponent(query)}&sortBy=sales`,
-        },
-      });
-    } else {
-      // Missing entire category
-      const keyPiece = stylePreset.keyPieces.find((kp) => kp.category === cat);
-      const suggestedSub = keyPiece?.subcategory || prefs[0] || "Item";
-      const suggestedColor = keyPiece?.colors[0] || "Black";
-      const query = `${suggestedColor} ${suggestedSub} men`;
-      results.push({
-        category: cat,
-        hasMatch: false,
-        bestMatch: null,
-        suggestedPiece: {
-          category: cat,
-          subcategory: suggestedSub,
-          color: suggestedColor,
-          reason: `You're missing ${suggestedSub.toLowerCase()} — essential for ${stylePreset.label} style.`,
-          shopQuery: query,
-          shopUrl: `https://shopee.ph/search?keyword=${encodeURIComponent(query)}&sortBy=sales`,
-        },
+        subcategory: suggestedSub,
+        color: suggestedColor,
+        reason: catItems.length === 0
+          ? `You're missing ${suggestedSub.toLowerCase()} — essential for ${stylePreset.label}`
+          : `Your ${cat}s don't match ${stylePreset.label} style. Try this!`,
+        shopQuery: query,
+        shopUrl: `https://shopee.ph/search?keyword=${encodeURIComponent(query)}&sortBy=sales`,
       });
     }
   }
 
-  return results;
+  return suggestions;
+}
+
+function getDefaultSubcategory(category: string): string {
+  const defaults: Record<string, string> = {
+    top: "T-Shirt",
+    bottom: "Jeans",
+    shoes: "Sneakers",
+    outerwear: "Jacket",
+    accessory: "Watch",
+  };
+  return defaults[category] || "Item";
+}
+
+// Shuffle array
+function shuffle<T>(arr: T[]): T[] {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
 }
 
 export function generateOutfits(
@@ -200,11 +191,15 @@ export function generateOutfits(
     styleId?: string;
     gender?: string;
     showSuggested?: boolean;
+    suggestCategories?: string[];
   }
 ): OutfitResult[] {
   const stylePreset = options?.styleId
     ? STYLE_PRESETS.find((s) => s.id === options.styleId)
     : undefined;
+
+  const gender = options?.gender || "male";
+  const suggestCategories = options?.suggestCategories || ["top", "bottom", "shoes", "accessory"];
 
   const tops = items.filter((i) => i.category === "top");
   const bottoms = items.filter((i) => i.category === "bottom");
@@ -212,7 +207,8 @@ export function generateOutfits(
   const outerwear = items.filter((i) => i.category === "outerwear");
 
   const results: OutfitResult[] = [];
-  const maxResults = options?.count || 6;
+  const maxResults = options?.count || 8;
+  const usedCombos = new Set<string>();
 
   const filterItems = (arr: ClothingItem[]) => {
     let filtered = arr;
@@ -244,25 +240,58 @@ export function generateOutfits(
     return matching.length > 0 ? matching : arr;
   };
 
-  let filteredTops = filterByStyle(filterItems(tops), "top");
-  let filteredBottoms = filterByStyle(filterItems(bottoms), "bottom");
-  let filteredShoes = filterByStyle(filterItems(shoes), "shoes");
-  let filteredOuterwear = filterByStyle(filterItems(outerwear), "outerwear");
+  let filteredTops = shuffle(filterByStyle(filterItems(tops), "top"));
+  let filteredBottoms = shuffle(filterByStyle(filterItems(bottoms), "bottom"));
+  let filteredShoes = shuffle(filterByStyle(filterItems(shoes), "shoes"));
+  let filteredOuterwear = shuffle(filterByStyle(filterItems(outerwear), "outerwear"));
 
-  if (filteredTops.length === 0) filteredTops = filterItems(tops);
-  if (filteredBottoms.length === 0) filteredBottoms = filterItems(bottoms);
-  if (filteredShoes.length === 0) filteredShoes = filterItems(shoes);
-  if (filteredOuterwear.length === 0) filteredOuterwear = filterItems(outerwear);
+  if (filteredTops.length === 0) filteredTops = shuffle(filterItems(tops));
+  if (filteredBottoms.length === 0) filteredBottoms = shuffle(filterItems(bottoms));
+  if (filteredShoes.length === 0) filteredShoes = shuffle(filterItems(shoes));
+  if (filteredOuterwear.length === 0) filteredOuterwear = shuffle(filterItems(outerwear));
 
-  // Generate "from your closet" outfits
-  for (const top of filteredTops) {
-    for (const bottom of filteredBottoms) {
-      const shoeOptions = filteredShoes.length > 0 ? filteredShoes : [null];
-      for (const shoe of shoeOptions) {
+  // Track how many times each item is used to ensure variety
+  const itemUsage: Record<string, number> = {};
+  const maxUsagePerItem = Math.max(1, Math.ceil(maxResults / Math.max(filteredTops.length, 1)));
+
+  const canUseItem = (item: ClothingItem) => {
+    const usage = itemUsage[item.id] || 0;
+    return usage < maxUsagePerItem;
+  };
+
+  const markUsed = (item: ClothingItem) => {
+    itemUsage[item.id] = (itemUsage[item.id] || 0) + 1;
+  };
+
+  // Generate unique outfit combinations - prioritize variety!
+  const generateCombos = () => {
+    for (const top of filteredTops) {
+      if (!canUseItem(top)) continue;
+      
+      for (const bottom of filteredBottoms) {
+        if (!canUseItem(bottom)) continue;
+        if (results.length >= maxResults) return;
+
+        const comboKey = `${top.id}-${bottom.id}`;
+        if (usedCombos.has(comboKey)) continue;
+
+        // Find a shoe that hasn't been overused
+        const availableShoes = filteredShoes.filter(canUseItem);
+        const shoe = availableShoes.length > 0 ? availableShoes[Math.floor(Math.random() * availableShoes.length)] : null;
+
         const outfitItems = [top, bottom];
         if (shoe) outfitItems.push(shoe);
 
         const score = scoreOutfit(outfitItems, stylePreset);
+
+        // Get suggestions for missing/non-matching categories
+        let suggestedPieces: SuggestedPiece[] = [];
+        if (stylePreset && options?.showSuggested !== false) {
+          suggestedPieces = getSuggestedPiecesForStyle(outfitItems, stylePreset, suggestCategories, gender);
+        }
+
+        const source: "closet" | "mixed" = suggestedPieces.length > 0 ? "mixed" : "closet";
+
         const accessories = suggestAccessories(
           outfitItems.map((i) => ({
             category: i.category,
@@ -272,22 +301,6 @@ export function generateOutfits(
           })),
           stylePreset?.id
         );
-
-        // Determine source label
-        let source: "closet" | "suggested" | "mixed" = "closet";
-        
-        // Analyze gap for suggestions
-        let suggestedPieces: SuggestedPiece[] = [];
-        if (stylePreset) {
-          const gapAnalysis = analyzeStyleGap(outfitItems, stylePreset);
-          suggestedPieces = gapAnalysis
-            .filter((g) => !g.hasMatch && g.suggestedPiece)
-            .map((g) => g.suggestedPiece!);
-          
-          if (suggestedPieces.length > 0) {
-            source = "mixed";
-          }
-        }
 
         results.push({
           items: outfitItems,
@@ -301,87 +314,97 @@ export function generateOutfits(
           inspoLinks: buildInspoLinks(outfitItems, stylePreset),
         });
 
-        if (filteredOuterwear.length > 0) {
-          for (const outer of filteredOuterwear) {
-            const withOuter = [...outfitItems, outer];
-            const outerScore = scoreOutfit(withOuter, stylePreset);
-            const outerAccessories = suggestAccessories(
-              withOuter.map((i) => ({
-                category: i.category,
-                subcategory: i.subcategory,
-                primaryColor: i.primaryColor,
-                occasion: i.occasion,
-              })),
-              stylePreset?.id
-            );
-            
-            let outerSuggested: SuggestedPiece[] = [];
-            let outerSource: "closet" | "suggested" | "mixed" = "closet";
-            if (stylePreset) {
-              const outerGap = analyzeStyleGap(withOuter, stylePreset);
-              outerSuggested = outerGap
-                .filter((g) => !g.hasMatch && g.suggestedPiece)
-                .map((g) => g.suggestedPiece!);
-              if (outerSuggested.length > 0) outerSource = "mixed";
-            }
+        usedCombos.add(comboKey);
+        markUsed(top);
+        markUsed(bottom);
+        if (shoe) markUsed(shoe);
 
-            results.push({
-              items: withOuter,
-              score: outerScore,
-              description: getOutfitDescription(withOuter),
-              style: getOutfitStyleLabel(withOuter, stylePreset),
-              source: outerSource,
-              stylePreset,
-              accessories: outerAccessories,
-              suggestedPieces: outerSuggested,
-              inspoLinks: buildInspoLinks(withOuter, stylePreset),
-            });
+        // Also try with outerwear for variety
+        if (filteredOuterwear.length > 0 && results.length < maxResults) {
+          const availableOuter = filteredOuterwear.filter(canUseItem);
+          if (availableOuter.length > 0) {
+            const outer = availableOuter[Math.floor(Math.random() * availableOuter.length)];
+            const withOuter = [...outfitItems, outer];
+            const outerKey = `${comboKey}-${outer.id}`;
+            
+            if (!usedCombos.has(outerKey)) {
+              const outerScore = scoreOutfit(withOuter, stylePreset);
+              
+              let outerSuggested: SuggestedPiece[] = [];
+              if (stylePreset && options?.showSuggested !== false) {
+                outerSuggested = getSuggestedPiecesForStyle(withOuter, stylePreset, suggestCategories, gender);
+              }
+
+              const outerAccessories = suggestAccessories(
+                withOuter.map((i) => ({
+                  category: i.category,
+                  subcategory: i.subcategory,
+                  primaryColor: i.primaryColor,
+                  occasion: i.occasion,
+                })),
+                stylePreset?.id
+              );
+
+              results.push({
+                items: withOuter,
+                score: outerScore,
+                description: getOutfitDescription(withOuter),
+                style: getOutfitStyleLabel(withOuter, stylePreset),
+                source: outerSuggested.length > 0 ? "mixed" : "closet",
+                stylePreset,
+                accessories: outerAccessories,
+                suggestedPieces: outerSuggested,
+                inspoLinks: buildInspoLinks(withOuter, stylePreset),
+              });
+
+              usedCombos.add(outerKey);
+              markUsed(outer);
+            }
           }
         }
       }
     }
+  };
+
+  generateCombos();
+
+  // If we didn't get enough outfits, relax the usage limits and try again
+  if (results.length < maxResults) {
+    Object.keys(itemUsage).forEach(k => { itemUsage[k] = 0; });
+    generateCombos();
   }
 
-  // If style preset selected and we have few good matches, generate "suggested" outfits
-  if (stylePreset && (options?.showSuggested !== false)) {
-    const hasGoodClosetFits = results.filter((r) => r.source === "closet" && r.score >= 70).length;
+  // Generate "suggested" outfits (full outfit suggestions from style, not from closet)
+  if (stylePreset && options?.showSuggested !== false && results.length < maxResults) {
+    const allSuggestions = getSuggestedPiecesForStyle(items, stylePreset, ["top", "bottom", "shoes"], gender);
     
-    // Always generate suggestions for what's missing
-    const gapAnalysis = analyzeStyleGap(items, stylePreset);
-    const missingPieces = gapAnalysis.filter((g) => !g.hasMatch && g.suggestedPiece);
-    
-    if (missingPieces.length > 0 && hasGoodClosetFits < 3) {
-      // Create a "suggested outfit" entry  
-      const suggestedPieces = missingPieces.map((g) => g.suggestedPiece!);
-      const bestClosetItems = results.length > 0 
-        ? results[0].items 
-        : items.slice(0, 2);
-
-      if (bestClosetItems.length > 0) {
-        results.push({
-          items: bestClosetItems,
-          score: 60,
-          description: `${stylePreset.label} suggestion`,
-          style: stylePreset.label,
-          source: "suggested",
-          stylePreset,
-          accessories: suggestAccessories(
-            bestClosetItems.map((i) => ({
-              category: i.category,
-              subcategory: i.subcategory,
-              primaryColor: i.primaryColor,
-              occasion: i.occasion,
-            })),
-            stylePreset.id
-          ),
-          suggestedPieces,
-          inspoLinks: buildInspoLinks(bestClosetItems, stylePreset),
-        });
-      }
+    if (allSuggestions.length > 0) {
+      // Create a "suggested outfit" entry showing what to buy
+      const bestClosetItems = results.length > 0 ? results[0].items : [];
+      
+      results.push({
+        items: bestClosetItems,
+        score: 50,
+        description: `Complete ${stylePreset.label} look`,
+        style: stylePreset.label,
+        source: "suggested",
+        stylePreset,
+        accessories: suggestAccessories(
+          bestClosetItems.map((i) => ({
+            category: i.category,
+            subcategory: i.subcategory,
+            primaryColor: i.primaryColor,
+            occasion: i.occasion,
+          })),
+          stylePreset.id
+        ),
+        suggestedPieces: allSuggestions,
+        inspoLinks: buildInspoLinks(bestClosetItems, stylePreset),
+      });
     }
   }
 
-  // Sort: closet fits first (with high scores), then mixed, then suggested
+  // Sort: closet fits first (highest scores), then mixed, then suggested
   results.sort((a, b) => {
     const sourceOrder = { closet: 0, mixed: 1, suggested: 2 };
     const sourceDiff = sourceOrder[a.source] - sourceOrder[b.source];
@@ -414,11 +437,9 @@ export function suggestMissingItems(
   const shoes = items.filter((i) => i.category === "shoes");
   const accessories = items.filter((i) => i.category === "accessory");
 
-  // Style-specific suggestions
   const stylePreset = styleId ? STYLE_PRESETS.find((s) => s.id === styleId) : undefined;
 
   if (stylePreset) {
-    // Check what key pieces are missing for this style
     for (const keyPiece of stylePreset.keyPieces) {
       const catItems = items.filter((i) => i.category === keyPiece.category);
       const hasMatch = catItems.some(
@@ -438,7 +459,6 @@ export function suggestMissingItems(
     }
   }
 
-  // Generic suggestions based on wardrobe gaps
   if (tops.length === 0) {
     suggestions.push({
       category: "top",
@@ -470,9 +490,14 @@ export function suggestMissingItems(
       colors: ["Black", "Brown", "Silver"],
       reason: "A watch is the #1 accessory that upgrades any outfit instantly",
     });
+    suggestions.push({
+      category: "accessory",
+      subcategory: "Cap",
+      colors: ["Black", "Navy", "White"],
+      reason: "A cap adds instant streetwear vibes and sun protection",
+    });
   }
 
-  // Color gap analysis
   const existingColors = items.map((i) => getColorFamily(i.primaryColor));
   const hasNeutral = existingColors.some((c) => ["black", "white", "gray"].includes(c));
 
@@ -525,7 +550,15 @@ export function suggestMissingItems(
     });
   }
 
-  // Deduplicate by subcategory
+  if (!accessories.some((a) => a.subcategory?.toLowerCase().includes("sunglasses"))) {
+    suggestions.push({
+      category: "accessory",
+      subcategory: "Sunglasses",
+      colors: ["Black", "Brown"],
+      reason: "Essential for the PH sun and instant cool factor",
+    });
+  }
+
   const seen = new Set<string>();
   return suggestions
     .filter((s) => {
@@ -534,5 +567,5 @@ export function suggestMissingItems(
       seen.add(key);
       return true;
     })
-    .slice(0, 8);
+    .slice(0, 10);
 }

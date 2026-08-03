@@ -17,11 +17,11 @@ interface Suggestion {
 }
 
 const CAT_ORDER = ["top", "bottom", "shoes", "outerwear", "accessory"];
-const CAT_LABELS: Record<string, { label: string; emoji: string }> = {
+const CAT_INFO: Record<string, { label: string; emoji: string }> = {
   top: { label: "Tops", emoji: "👕" },
   bottom: { label: "Bottoms", emoji: "👖" },
   shoes: { label: "Shoes", emoji: "👟" },
-  outerwear: { label: "Outerwear", emoji: "🧥" },
+  outerwear: { label: "Layers", emoji: "🧥" },
   accessory: { label: "Accessories", emoji: "⌚" },
 };
 
@@ -29,6 +29,8 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
+  const [showExcludePanel, setShowExcludePanel] = useState(false);
 
   const stylePref = STYLE_PRESETS.find((s) => s.id === defaultStyle);
 
@@ -53,18 +55,30 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
       .finally(() => setLoading(false));
   }, [gender, defaultStyle]);
 
+  const toggleExcludeCategory = (cat: string) => {
+    setExcludedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 animate-fade-in">
         <div className="flex gap-2 mb-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-8 w-20 rounded-full skeleton" />)}
+          {[1,2,3,4].map(i => <div key={i} className="h-9 w-20 rounded-full skeleton" />)}
         </div>
         {[1, 2, 3].map((i) => <div key={i} className="rounded-2xl h-40 skeleton" />)}
       </div>
     );
   }
 
-  if (suggestions.length === 0) {
+  // Filter out excluded categories
+  const filteredSuggestions = suggestions.filter(s => !excludedCategories.has(s.category));
+
+  if (filteredSuggestions.length === 0 && suggestions.length === 0) {
     return (
       <div className="text-center pt-16 animate-fade-up">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-zinc-100 flex items-center justify-center">
@@ -76,26 +90,70 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
     );
   }
 
-  // Group suggestions by category
+  // Group by category
   const byCategory: Record<string, Suggestion[]> = {};
-  suggestions.forEach(s => {
+  filteredSuggestions.forEach(s => {
     if (!byCategory[s.category]) byCategory[s.category] = [];
     byCategory[s.category].push(s);
   });
 
   const categories = CAT_ORDER.filter(c => byCategory[c]?.length > 0);
-  const filtered = activeCategory === "all" ? suggestions : (byCategory[activeCategory] || []);
+  const filtered = activeCategory === "all" ? filteredSuggestions : (byCategory[activeCategory] || []);
 
   return (
     <div className="animate-fade-up">
       {/* Header */}
       <div className="mb-4">
-        <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">What to buy next</p>
-        <p className="text-[14px] text-zinc-600">
-          Based on your closet
-          {stylePref && <> · <span className="font-semibold">{stylePref.emoji} {stylePref.label}</span></>}
-        </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">What to buy next</p>
+            <p className="text-[14px] text-zinc-600">
+              Based on your closet
+              {stylePref && <> · <span className="font-semibold">{stylePref.emoji} {stylePref.label}</span></>}
+            </p>
+          </div>
+          <button onClick={() => setShowExcludePanel(!showExcludePanel)}
+            className={`text-[11px] font-medium px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 ${
+              excludedCategories.size > 0 ? "bg-red-100 text-red-600" : "bg-zinc-100 text-zinc-500"
+            }`}>
+            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" /><path d="M4.93 4.93l14.14 14.14" />
+            </svg>
+            {excludedCategories.size > 0 ? `Hidden (${excludedCategories.size})` : "Hide"}
+          </button>
+        </div>
       </div>
+
+      {/* Exclude Panel */}
+      {showExcludePanel && (
+        <div className="mb-4 p-3 bg-zinc-50 rounded-2xl animate-fade-up">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Hide categories</p>
+            {excludedCategories.size > 0 && (
+              <button onClick={() => setExcludedCategories(new Set())} className="text-[11px] text-red-500 font-medium">
+                Show all
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {CAT_ORDER.map(cat => {
+              const isHidden = excludedCategories.has(cat);
+              const count = suggestions.filter(s => s.category === cat).length;
+              if (count === 0) return null;
+              return (
+                <button key={cat} onClick={() => toggleExcludeCategory(cat)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all ${
+                    isHidden ? "bg-red-100 text-red-600 line-through" : "bg-white text-zinc-600 border border-zinc-200"
+                  }`}>
+                  <span>{CAT_INFO[cat]?.emoji}</span>
+                  {CAT_INFO[cat]?.label}
+                  <span className="text-[9px] opacity-60">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Category Tabs */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 mb-5">
@@ -103,46 +161,52 @@ export default function Suggestions({ gender, defaultStyle }: { gender?: string;
           className={`flex-shrink-0 h-9 px-4 rounded-full text-[12px] font-medium transition-all ${
             activeCategory === "all" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
           }`}>
-          All ({suggestions.length})
+          All ({filteredSuggestions.length})
         </button>
         {categories.map(cat => (
           <button key={cat} onClick={() => setActiveCategory(cat)}
             className={`flex-shrink-0 h-9 px-4 rounded-full text-[12px] font-medium transition-all flex items-center gap-1.5 ${
               activeCategory === cat ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
             }`}>
-            <span>{CAT_LABELS[cat]?.emoji}</span>
-            {CAT_LABELS[cat]?.label} ({byCategory[cat]?.length || 0})
+            <span>{CAT_INFO[cat]?.emoji}</span>
+            {CAT_INFO[cat]?.label}
           </button>
         ))}
       </div>
 
-      {/* Suggestions Grid */}
-      <div className="space-y-6">
-        {activeCategory === "all" ? (
-          // Grouped view
-          categories.map(cat => (
-            <div key={cat} className="animate-fade-up">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">{CAT_LABELS[cat]?.emoji}</span>
-                <h3 className="text-[14px] font-semibold text-zinc-800">{CAT_LABELS[cat]?.label}</h3>
-                <span className="text-[11px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">{byCategory[cat]?.length}</span>
+      {filteredSuggestions.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-[14px] text-zinc-500">All categories hidden</p>
+          <button onClick={() => setExcludedCategories(new Set())} className="text-[13px] text-blue-500 font-medium mt-2">
+            Show all
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {activeCategory === "all" ? (
+            categories.map(cat => (
+              <div key={cat} className="animate-fade-up">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">{CAT_INFO[cat]?.emoji}</span>
+                  <h3 className="text-[14px] font-semibold text-zinc-800">{CAT_INFO[cat]?.label}</h3>
+                  <span className="text-[10px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">{byCategory[cat]?.length}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {byCategory[cat]?.map((s, i) => (
+                    <SuggestionCard key={i} suggestion={s} compact />
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {byCategory[cat]?.map((s, i) => (
-                  <SuggestionCard key={i} suggestion={s} compact />
-                ))}
-              </div>
+            ))
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((s, i) => (
+                <SuggestionCard key={i} suggestion={s} />
+              ))}
             </div>
-          ))
-        ) : (
-          // Single category view - larger cards
-          <div className="space-y-3">
-            {filtered.map((s, i) => (
-              <SuggestionCard key={i} suggestion={s} />
-            ))}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -152,18 +216,16 @@ function SuggestionCard({ suggestion: s, compact = false }: { suggestion: Sugges
   const [showStores, setShowStores] = useState(false);
 
   if (compact) {
-    // Compact grid card
     return (
       <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden animate-pop-in">
         <a href={img?.shopUrl || `https://shopee.ph/search?keyword=${encodeURIComponent(`${s.colors[0]} ${s.subcategory}`)}`}
-          target="_blank" rel="noopener noreferrer"
-          className="block">
+          target="_blank" rel="noopener noreferrer" className="block">
           <div className="aspect-square bg-zinc-50 overflow-hidden relative">
             {img ? (
               <img src={img.image} alt={img.alt} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-4xl text-zinc-200">
-                {CAT_LABELS[s.category]?.emoji || "👕"}
+                {CAT_INFO[s.category]?.emoji || "👕"}
               </div>
             )}
             {img?.badge && (
@@ -188,22 +250,20 @@ function SuggestionCard({ suggestion: s, compact = false }: { suggestion: Sugges
     );
   }
 
-  // Full card
   return (
     <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden animate-pop-in">
-      {/* Product images row */}
       {s.products && s.products.length > 0 && (
         <div className="flex gap-2 overflow-x-auto no-scrollbar p-3 pb-2 bg-zinc-50/50">
           {s.products.map((p) => (
             <a key={p.id} href={p.shopUrl} target="_blank" rel="noopener noreferrer"
-              className="flex-shrink-0 w-[120px] rounded-xl overflow-hidden border border-zinc-100 bg-white hover:shadow-md active:scale-[0.97] transition-all">
+              className="flex-shrink-0 w-[110px] rounded-xl overflow-hidden border border-zinc-100 bg-white hover:shadow-md active:scale-[0.97] transition-all">
               <div className="aspect-square bg-zinc-50 overflow-hidden relative">
                 <img src={p.image} alt={p.alt} className="w-full h-full object-cover" loading="lazy" />
-                <span className="absolute top-1.5 left-1.5 text-[8px] font-bold bg-white/90 backdrop-blur-sm text-zinc-700 px-1.5 py-0.5 rounded-full">{p.badge}</span>
+                <span className="absolute top-1 left-1 text-[8px] font-bold bg-white/90 text-zinc-700 px-1.5 py-0.5 rounded-full">{p.badge}</span>
               </div>
-              <div className="p-2">
+              <div className="p-1.5">
                 <p className="text-[11px] font-bold text-orange-500">{p.priceRange}</p>
-                <div className="flex items-center gap-1 mt-0.5">
+                <div className="flex items-center gap-1">
                   <span className="text-[9px] text-yellow-500">★ {p.rating}</span>
                   <span className="text-[8px] text-zinc-300">{p.soldCount}</span>
                 </div>
@@ -219,35 +279,29 @@ function SuggestionCard({ suggestion: s, compact = false }: { suggestion: Sugges
             <p className="text-[15px] font-semibold text-zinc-900">{s.colors[0]} {s.subcategory}</p>
             <p className="text-[12px] text-zinc-500 mt-1 leading-relaxed">{s.reason}</p>
           </div>
-          <span className="text-2xl flex-shrink-0">{CAT_LABELS[s.category]?.emoji || "👕"}</span>
+          <span className="text-2xl flex-shrink-0">{CAT_INFO[s.category]?.emoji || "👕"}</span>
         </div>
 
-        {/* Pairing tip */}
         {s.pairingTip && (
           <div className="mt-3 bg-zinc-50 rounded-xl p-3">
-            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">💡 How to wear it</p>
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">💡 Style tip</p>
             <p className="text-[11px] text-zinc-600 leading-relaxed">{s.pairingTip}</p>
           </div>
         )}
 
-        {/* Shop buttons */}
         <div className="mt-3">
           <button onClick={() => setShowStores(!showStores)}
             className="w-full h-10 rounded-xl bg-zinc-900 text-white text-[12px] font-semibold hover:bg-zinc-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0" />
-            </svg>
-            {showStores ? "Hide stores" : "Where to buy"}
+            🛒 {showStores ? "Hide stores" : "Where to buy"}
           </button>
 
           {showStores && (
             <div className="mt-2 grid grid-cols-3 gap-1.5 animate-fade-up">
               {s.shoppingLinks.slice(0, 6).map((l) => (
                 <a key={l.store} href={l.url} target="_blank" rel="noopener noreferrer"
-                  className="flex flex-col items-center gap-1 p-2 rounded-xl bg-zinc-50 hover:bg-zinc-100 active:scale-95 transition-all">
+                  className="flex flex-col items-center gap-0.5 p-2 rounded-xl bg-zinc-50 hover:bg-zinc-100 active:scale-95 transition-all">
                   <span className="text-lg">{l.icon}</span>
                   <span className="text-[10px] font-medium text-zinc-600">{l.store}</span>
-                  {l.tag && <span className="text-[8px] text-zinc-400">{l.tag}</span>}
                 </a>
               ))}
             </div>
@@ -257,7 +311,3 @@ function SuggestionCard({ suggestion: s, compact = false }: { suggestion: Sugges
     </div>
   );
 }
-
-const CAT_LABELS_ALT: Record<string, string> = {
-  top: "👕", bottom: "👖", shoes: "👟", outerwear: "🧥", accessory: "⌚",
-};
